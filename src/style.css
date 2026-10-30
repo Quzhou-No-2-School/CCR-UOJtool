@@ -15,6 +15,8 @@
   --warn-text: #92400e;
   --err-bg: #fee2e2;
   --err-text: #b91c1c;
+  --ok-bg: #d1fae5;
+  --ok-text: #065f46;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -32,6 +34,8 @@
     --warn-text: #fde68a;
     --err-bg: #7f1d1d;
     --err-text: #fecaca;
+    --ok-bg: #064e3b;
+    --ok-text: #6ee7b7;
   }
 }
 
@@ -186,6 +190,10 @@ button.primary { background: var(--accent); border-color: var(--accent); color: 
 .badge-unsupported { background: var(--border); color: var(--muted); }
 .badge-warn { background: var(--warn-bg); color: var(--warn-text); }
 .badge-err { background: var(--err-bg); color: var(--err-text); }
+
+.badge-target-uoj { background: var(--accent-weak); color: var(--accent); }
+.badge-target-hydro { background: var(--ok-bg); color: var(--ok-text); }
+.badge-target-skipped { background: var(--border); color: var(--muted); }
 
 /* ---------- 详情 ---------- */
 

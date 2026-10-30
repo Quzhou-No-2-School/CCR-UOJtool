@@ -3,7 +3,14 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import type { ContestDto, ProblemDto, ProblemEditState } from "./types";
+import type {
+  ContestDto,
+  ExportReport,
+  ExportTarget,
+  ProblemDto,
+  ProblemEditDto,
+  ProblemEditState,
+} from "./types";
 
 // ---- 全局状态 ----
 
@@ -375,6 +382,137 @@ async function chooseOutDir(): Promise<void> {
   updateStatus();
 }
 
+// ---- 导出 ----
+
+function targetLabel(target: ExportTarget): string {
+  switch (target) {
+    case "uoj":
+      return "UOJ";
+    case "hydro":
+      return "Hydro";
+    case "both":
+      return "UOJ + Hydro";
+  }
+}
+
+function setExportButtonsDisabled(disabled: boolean): void {
+  for (const id of ["#btn-export-uoj", "#btn-export-hydro", "#btn-export-both"] as const) {
+    $<HTMLButtonElement>(id).disabled = disabled;
+  }
+}
+
+/** 校验可导出题的时限/内存输入；非法时返回错误描述。 */
+function validateEdits(): string | null {
+  if (!contest) return "尚未打开比赛";
+  for (const p of contest.problems) {
+    const e = edits.get(p.name);
+    if (!isConvertible(p) || !e?.enabled) continue;
+    for (const [label, raw] of [
+      ["时限", e.time],
+      ["内存", e.mem],
+    ] as const) {
+      const s = raw.trim();
+      if (s === "") continue;
+      const n = Number(s);
+      if (!Number.isFinite(n) || n <= 0) {
+        return `${p.name}：${label}“${s}”不是有效的正数`;
+      }
+    }
+  }
+  return null;
+}
+
+/** 把编辑状态转成 ProblemEditDto；空字符串 → null（由后端自行推断）。 */
+function buildEditsPayload(): ProblemEditDto[] {
+  if (!contest) return [];
+  return contest.problems.map((p) => {
+    const e = edits.get(p.name) ?? defaultEdit(p);
+    const parseLimit = (raw: string): number | null => {
+      const s = raw.trim();
+      if (s === "") return null;
+      const n = Number(s);
+      return Number.isFinite(n) && n > 0 ? n : null;
+    };
+    return {
+      name: p.name,
+      target_id: e.targetId.trim() || null,
+      time_limit: parseLimit(e.time),
+      memory_limit: parseLimit(e.mem),
+      checker: e.checker.trim() || null,
+      enabled: e.enabled,
+    };
+  });
+}
+
+async function exportContest(target: ExportTarget): Promise<void> {
+  if (!contest || !outDir) return;
+  const invalid = validateEdits();
+  if (invalid !== null) {
+    toast(invalid);
+    return;
+  }
+  const payload = buildEditsPayload();
+  setExportButtonsDisabled(true);
+  try {
+    const report = await invoke<ExportReport>("export_problems", {
+      contestPath: contest.path,
+      edits: payload,
+      target,
+      outDir,
+    });
+    renderReport(report, target);
+  } catch (err) {
+    toast(`导出失败：${String(err)}`);
+  } finally {
+    setExportButtonsDisabled(false);
+  }
+}
+
+// ---- 导出报告 ----
+
+function renderReport(report: ExportReport, target: ExportTarget): void {
+  const dialog = $<HTMLDialogElement>("#report-dialog");
+  const summary = $("#report-summary");
+  const body = $("#report-body");
+
+  const ok = report.items.filter((r) => r.zip_path !== null && r.errors.length === 0).length;
+  const skipped = report.items.filter((r) => r.skipped).length;
+  const failed = report.items.filter((r) => r.errors.length > 0).length;
+  summary.textContent =
+    `目标：${targetLabel(target)}　输出目录：${outDir ?? "—"}　` +
+    `成功 ${ok} / 跳过 ${skipped} / 出错 ${failed}`;
+
+  body.replaceChildren();
+  for (const item of report.items) {
+    const box = el("div", "report-item");
+    const head = el("div", "report-item-head");
+    head.appendChild(el("strong", undefined, item.problem));
+    head.appendChild(
+      badge(
+        item.target === "skipped" ? "badge-target-skipped" : `badge-target-${item.target}`,
+        item.target === "skipped" ? "跳过" : item.target.toUpperCase(),
+      ),
+    );
+    if (item.skipped) head.appendChild(badge("badge-unsupported", "未导出"));
+    head.appendChild(el("span", "card-checker", `${item.n_tests} 个测试点`));
+    box.appendChild(head);
+
+    if (item.zip_path !== null) box.appendChild(el("p", "report-zip", item.zip_path));
+    if (item.warnings.length > 0) {
+      const ul = el("ul", "warn-list");
+      for (const w of item.warnings) ul.appendChild(el("li", undefined, w));
+      box.appendChild(ul);
+    }
+    if (item.errors.length > 0) {
+      const ul = el("ul", "err-list");
+      for (const er of item.errors) ul.appendChild(el("li", undefined, er));
+      box.appendChild(ul);
+    }
+    body.appendChild(box);
+  }
+  dialog.showModal();
+}
+
 // ---- 入口 ----
 
 function init(): void {
@@ -386,6 +524,16 @@ function init(): void {
   );
   $<HTMLButtonElement>("#btn-choose-out").addEventListener("click", () =>
     void withBusy($<HTMLButtonElement>("#btn-choose-out"), chooseOutDir),
+  );
+  for (const [id, target] of [
+    ["#btn-export-uoj", "uoj"],
+    ["#btn-export-hydro", "hydro"],
+    ["#btn-export-both", "both"],
+  ] as const) {
+    $<HTMLButtonElement>(id).addEventListener("click", () => void exportContest(target));
+  }
+  $("#btn-report-close").addEventListener("click", () =>
+    $<HTMLDialogElement>("#report-dialog").close(),
   );
   renderProblemList();
   renderDetail();
