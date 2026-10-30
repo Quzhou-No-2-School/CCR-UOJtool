@@ -106,3 +106,44 @@ fn missing_data_dir_is_error() {
     let tmp = TempDir::new().unwrap();
     assert!(scan_contest(tmp.path(), &opts()).is_err());
 }
+
+/// 恶意 .prb：测试点 in/out 含路径穿越 / 绝对路径 / 反斜杠 → 必须跳过并警告，
+/// 不得把目录外文件（如 ../../secret.txt）带进导出数据包（终审 I1）。
+#[test]
+fn rejects_path_traversal_test_points() {
+    let tmp = TempDir::new().unwrap();
+    let data = tmp.path().join("data/M");
+    std::fs::create_dir_all(&data).unwrap();
+    std::fs::write(data.join("good.in"), "in\n").unwrap();
+    std::fs::write(data.join("good.out"), "out\n").unwrap();
+    // 模拟目录外的敏感文件：非法点指向它时绝不能进入 cases
+    std::fs::write(tmp.path().join("secret.txt"), "s3cret").unwrap();
+    std::fs::write(
+        data.join(".prb"),
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<problem type="TRA_0_4" maker="ccr-plus" version="1.1.0">
+    <source dir="M" file="M" code="100"/>
+    <task input="M.in" output="M.out" checker="fulltext" time="10">
+        <subtask score="100">
+            <point in="good.in" out="good.out" time="1" mem="128"/>
+            <point in="../secret.txt" out="good.out" time="1" mem="128"/>
+            <point in="/etc/passwd" out="good.out" time="1" mem="128"/>
+            <point in="sub\x.in" out="good.out" time="1" mem="128"/>
+        </subtask>
+    </task>
+</problem>
+"#,
+    )
+    .unwrap();
+
+    let contest = scan_contest(tmp.path(), &opts()).unwrap();
+    let m = &contest.problems[0];
+    assert_eq!(m.cases.len(), 1, "仅保留合法测试点");
+    assert_eq!(m.cases[0].in_file, Path::new("good.in"));
+    let illegal: Vec<_> = m
+        .warnings
+        .iter()
+        .filter(|w| w.contains("文件名非法"))
+        .collect();
+    assert_eq!(illegal.len(), 3, "三个非法点各有警告，实际: {:?}", m.warnings);
+}

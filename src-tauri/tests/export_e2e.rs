@@ -143,3 +143,46 @@ fn e2e_edits_rename_disable_checker() {
     assert!(conf.contains("input_pre prog"));
     assert!(conf.contains("n_tests 10"));
 }
+
+/// target_id 含路径分隔符/穿越 → 拒绝并回退题名，警告提示（终审 I1）。
+#[test]
+fn e2e_target_id_sanitized() {
+    let tmp = TempDir::new().unwrap();
+    build_fixture_contest(tmp.path());
+    let contest = scan_contest(tmp.path(), &ScanOptions::default()).unwrap();
+    let out = tmp.path().join("export");
+
+    let edits = vec![ProblemEditDto {
+        name: "A".into(),
+        target_id: Some("../evil".into()),
+        time_limit: None,
+        memory_limit: None,
+        checker: None,
+        enabled: true,
+    }];
+    let report = export_contest(
+        &contest,
+        Target::Uoj,
+        &out,
+        &ExportOptions { edits },
+    )
+    .unwrap();
+
+    // 兜底：zip 用原题名 A 命名，且不产生逃逸路径的文件
+    assert!(out.join("uoj/A.zip").is_file());
+    assert!(!out.join("evil.zip").exists());
+    assert!(!tmp.path().join("evil.zip").exists());
+
+    let a = report.items.iter().find(|i| i.problem == "A").unwrap();
+    assert!(a.warnings.iter().any(|w| w.contains("题号")));
+
+    // conf 内 input_pre 回退为题名 A
+    let f = std::fs::File::open(out.join("uoj/A.zip")).unwrap();
+    let mut ar = zip::ZipArchive::new(f).unwrap();
+    let mut conf = String::new();
+    ar.by_name("problem.conf")
+        .unwrap()
+        .read_to_string(&mut conf)
+        .unwrap();
+    assert!(conf.contains("input_pre A"));
+}
