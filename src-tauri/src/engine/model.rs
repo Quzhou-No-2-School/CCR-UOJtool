@@ -1,0 +1,141 @@
+//! 核心数据模型：比赛 / 题目 / 测试点。
+//!
+//! 引擎内所有阶段（发现、解析、导出）共享这些类型。
+
+use serde::Serialize;
+use std::path::PathBuf;
+
+/// CCR 题目类型（对应 `.prb` 根节点 `type` 属性，见计划 0.2）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub enum ProblemKind {
+    Traditional,
+    AnswersOnly,
+    Interactive,
+    Unknown,
+}
+
+/// 单个测试点（文件相对 `data/<题名>/`）。
+#[derive(Debug, Clone, Serialize)]
+pub struct TestCase {
+    pub in_file: PathBuf,
+    pub out_file: PathBuf,
+    /// 时限（秒，可为小数）。
+    pub time_limit: f64,
+    /// 内存限制（MB）。
+    pub memory_limit: f64,
+    /// 所属 subtask 分值。
+    pub score: u32,
+}
+
+/// 一道题的解析结果。
+#[derive(Debug, Clone, Serialize)]
+pub struct Problem {
+    /// 目录名（如 "A"）。
+    pub name: String,
+    pub kind: ProblemKind,
+    /// `<task input>`，如 "A.in"。
+    pub in_file: Option<String>,
+    /// `<task output>`，如 "A.out"。
+    pub out_file: Option<String>,
+    /// 内置校验器名（去扩展名后，如 "fulltext"）。
+    pub checker: Option<String>,
+    /// data 目录中的自定义校验器文件名（若有）。
+    pub custom_checker: Option<String>,
+    /// 测试点（数字感知排序后）。
+    pub cases: Vec<TestCase>,
+    /// 解析阶段警告。
+    pub warnings: Vec<String>,
+    pub prb_found: bool,
+}
+
+impl Problem {
+    /// 统一时限取最大值（决策 D3）。
+    pub fn max_time(&self) -> f64 {
+        todo!()
+    }
+
+    /// 统一内存取最大值（决策 D3）。
+    pub fn max_mem(&self) -> f64 {
+        todo!()
+    }
+
+    /// subtask 分值是否均匀（所有 case score 相等即视为均匀）。
+    pub fn uniform_score(&self) -> bool {
+        todo!()
+    }
+}
+
+/// 一场比赛。
+#[derive(Debug, Serialize)]
+pub struct Contest {
+    pub name: String,
+    pub path: PathBuf,
+    pub problems: Vec<Problem>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 构造带 n 个测试点的题目，score/time/mem 由切片逐点给出。
+    fn problem_with(scores: &[u32], times: &[f64], mems: &[f64]) -> Problem {
+        let cases = scores
+            .iter()
+            .enumerate()
+            .map(|(i, &s)| TestCase {
+                in_file: PathBuf::from(format!("P{}.in", i + 1)),
+                out_file: PathBuf::from(format!("P{}.out", i + 1)),
+                time_limit: times[i],
+                memory_limit: mems[i],
+                score: s,
+            })
+            .collect();
+        Problem {
+            name: "P".into(),
+            kind: ProblemKind::Traditional,
+            in_file: None,
+            out_file: None,
+            checker: None,
+            custom_checker: None,
+            cases,
+            warnings: Vec::new(),
+            prb_found: true,
+        }
+    }
+
+    #[test]
+    fn max_time_takes_largest() {
+        let p = problem_with(&[10, 10, 10], &[0.5, 2.0, 1.0], &[128.0; 3]);
+        assert_eq!(p.max_time(), 2.0);
+    }
+
+    #[test]
+    fn max_mem_takes_largest() {
+        let p = problem_with(&[10, 10, 10], &[1.0; 3], &[128.0, 512.0, 256.0]);
+        assert_eq!(p.max_mem(), 512.0);
+    }
+
+    #[test]
+    fn max_time_empty_cases_is_f64_min() {
+        let p = problem_with(&[], &[], &[]);
+        assert_eq!(p.max_time(), f64::MIN);
+    }
+
+    #[test]
+    fn uniform_score_true_when_all_equal() {
+        let p = problem_with(&[10, 10, 10], &[1.0; 3], &[128.0; 3]);
+        assert!(p.uniform_score());
+    }
+
+    #[test]
+    fn uniform_score_false_when_mixed() {
+        let p = problem_with(&[30, 70], &[1.0; 2], &[128.0; 2]);
+        assert!(!p.uniform_score());
+    }
+
+    #[test]
+    fn uniform_score_true_when_empty() {
+        let p = problem_with(&[], &[], &[]);
+        assert!(p.uniform_score());
+    }
+}
