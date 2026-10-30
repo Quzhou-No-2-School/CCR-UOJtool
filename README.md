@@ -140,3 +140,11 @@ zip 内保留一层题名文件夹：
 | subtask 分值 | 等分 100/N（非均匀时警告） | `cases` 平铺（V1 不映射 subtask） |
 | ANS/INT 题 | 跳过 + 警告 | 跳过 + 警告 |
 | `.prb` 不存在 | 降级为传统题 + 警告 | 同左 |
+
+## 已知限制与未来工作
+
+- 不映射 Hydro subtask 分值（D8）——数据在 `.prb` 中已有，未来可加 `subtasks:` 输出
+- 不生成/推断 std.cpp、val.cpp（UOJ hack 功能需人工补充）
+- 题面不转换（D10）；Hydro 仅占位模板
+- UOJ 自定义校验器无法自动转换（接口不同，0.7 表）
+- 提交答案题/交互题转换（UOJ submit_answer / interactive 配置）
