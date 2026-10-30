@@ -126,3 +126,17 @@ zip 内保留一层题名文件夹：
 | `filename` | 文件 IO 前缀（来自 CCR 的 `<task input>`，去掉 `.in`；标准 IO 则无此项） |
 | `checker_type` | CCR `fulltext` 映射为 `default`；有自定义校验器源码时为 `ccr`（Hydro 内置支持，可直接复用） |
 | `cases` | 显式列出每个测试点的 input/output |
+
+## 格式映射总表
+
+| CCR-Plus | → UOJ | → Hydro |
+|---|---|---|
+| `data/<题>/` + `.prb` | 扁平 zip（无子目录） | zip 内 `<题名>/` 文件夹 |
+| `<point>` 列表（数字感知排序） | `<pre>1.in/.out` … `<pre>N.in/.out` | `testdata/1.in/.out` … |
+| 每点 time(s)/mem(MB) 取最大 | `time_limit` = ceil(max_time)，`memory_limit` = ceil(max_mem) | `time: <max*1000>`(ms 整数)，`memory: <max_mem>` |
+| `<task input="A.in">` | `input_pre` = 题名（UI 可改），`input_suf in` | `filename: A`（去掉 `.in`） |
+| `checker=fulltext` | `use_builtin_checker lcmp` | `checker_type: default` |
+| 自定义校验器 | 警告：接口不兼容，需人工改写 testlib checker | 有源码则复制 + `checker_type: ccr`；否则警告 |
+| subtask 分值 | 等分 100/N（非均匀时警告） | `cases` 平铺（V1 不映射 subtask） |
+| ANS/INT 题 | 跳过 + 警告 | 跳过 + 警告 |
+| `.prb` 不存在 | 降级为传统题 + 警告 | 同左 |
