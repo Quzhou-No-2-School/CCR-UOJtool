@@ -147,3 +147,40 @@ fn rejects_path_traversal_test_points() {
         .collect();
     assert_eq!(illegal.len(), 3, "三个非法点各有警告，实际: {:?}", m.warnings);
 }
+
+/// CCR 编译出的 ELF 二进制校验器（名为 checker，无源码扩展名）→
+/// 必须发"非源码"警告（终审 I2），不得被当作源码映射。
+#[test]
+fn binary_custom_checker_warns_not_source() {
+    let tmp = TempDir::new().unwrap();
+    let data = tmp.path().join("data/K");
+    std::fs::create_dir_all(&data).unwrap();
+    std::fs::write(data.join("K1.in"), "in\n").unwrap();
+    std::fs::write(data.join("K1.out"), "out\n").unwrap();
+    // ELF 魔数开头，模拟 CCR 编译产物
+    std::fs::write(data.join("checker"), b"\x7fELF\x02\x01\x01binary").unwrap();
+    std::fs::write(
+        data.join(".prb"),
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<problem type="TRA_0_4" maker="ccr-plus" version="1.1.0">
+    <source dir="K" file="K" code="100"/>
+    <task input="K.in" output="K.out" checker="checker" time="10">
+        <subtask score="100">
+            <point in="K1.in" out="K1.out" time="1" mem="128"/>
+        </subtask>
+    </task>
+</problem>
+"#,
+    )
+    .unwrap();
+
+    let contest = scan_contest(tmp.path(), &opts()).unwrap();
+    let k = &contest.problems[0];
+    assert!(
+        k.warnings.iter().any(|w| w.contains("非源码")),
+        "应发非源码警告，实际: {:?}",
+        k.warnings
+    );
+    // 文件本身仍被记录（UOJ 侧需提示人工适配）
+    assert_eq!(k.custom_checker.as_deref(), Some("checker"));
+}

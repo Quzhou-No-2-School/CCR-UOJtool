@@ -452,4 +452,42 @@ mod tests {
             .unwrap();
         assert_eq!(s, "// checker.cpp source\n");
     }
+
+    /// 非源码校验器（如 CCR 编译出的 ELF 二进制）→ 不映射 ccr、不复制进包，
+    /// 回退 default 并发警告（终审 I2）。
+    #[test]
+    fn binary_custom_checker_falls_back_to_default() {
+        let mut c = problem_with("C", &[1.0, 1.0], &[128.0, 128.0], Some("C.in"));
+        c.custom_checker = Some("checker".to_string());
+        let (yaml, warnings) = build_config_yaml(&c, &HydroOptions::default());
+        assert!(yaml.contains("checker_type: default\n"));
+        assert!(!yaml.contains("checker: "));
+        assert!(warnings.iter().any(|w| w.contains("非源码")));
+    }
+
+    /// 导出时非源码校验器文件不得被打进 testdata/。
+    #[test]
+    fn binary_custom_checker_not_copied_into_testdata() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let (mut c, contest_path) = fixture_on_disk(&tmp, "C", 2);
+        c.custom_checker = Some("checker".to_string());
+        let src = contest_path.join("data/C/checker");
+        std::fs::write(&src, b"\x7fELF\x02\x01\x01binary").unwrap();
+        let out_dir = tmp.path().join("out");
+
+        let item = export_problem_hydro(&c, &contest_path, &out_dir, &HydroOptions::default())
+            .unwrap();
+        assert!(!item.skipped);
+        assert!(item.warnings.iter().any(|w| w.contains("非源码")));
+
+        let f = std::fs::File::open(item.zip_path.unwrap()).unwrap();
+        let archive = zip::ZipArchive::new(f).unwrap();
+        let names: Vec<&str> = archive.file_names().collect();
+        assert!(
+            !names.contains(&"C/testdata/checker"),
+            "二进制校验器不得进包，实际条目: {names:?}"
+        );
+        // 数据文件正常在包内
+        assert!(names.contains(&"C/testdata/1.in"));
+    }
 }
