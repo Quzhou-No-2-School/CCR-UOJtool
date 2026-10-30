@@ -6,10 +6,16 @@ use crate::engine::model::{EngineError, ExportItem, Problem, ProblemKind};
 use crate::engine::ziputil;
 use std::path::Path;
 
-/// Hydro 导出选项（用户可覆盖 checker_type）。
+/// Hydro 导出选项（用户可覆盖 checker_type / 题号 / 限制）。
 #[derive(Debug, Clone, Default)]
 pub struct HydroOptions {
     pub checker_override: Option<String>,
+    /// 覆盖题号（filename 与 zip/文件夹名）。
+    pub target_id: Option<String>,
+    /// 覆盖统一时限（秒）。
+    pub time_limit: Option<f64>,
+    /// 覆盖统一内存（MB，非整数上取整）。
+    pub memory_limit: Option<f64>,
 }
 
 /// 单题 Hydro 导出结果。
@@ -27,17 +33,23 @@ fn io_filename(p: &Problem) -> &str {
 pub fn build_config_yaml(p: &Problem, opts: &HydroOptions) -> (String, Vec<String>) {
     let mut warnings = Vec::new();
 
-    // 统一限制取最大值（D3）。
-    let (time_ms, memory_mb) = if p.cases.is_empty() {
+    // 统一限制取最大值（D3）；用户覆盖优先。
+    let (time_ms, memory_mb) = if let (Some(t), Some(m)) = (opts.time_limit, opts.memory_limit) {
+        ((t * 1000.0).round() as i64, m.ceil() as i64)
+    } else if p.cases.is_empty() {
         warnings.push("该题没有测试点，使用默认限制 1000ms/128MB".to_string());
         (1000, 128)
     } else {
-        let max_time = p.max_time();
-        let max_mem = p.max_mem();
-        if p.cases.iter().any(|c| c.time_limit != max_time) {
+        let max_time = opts.time_limit.unwrap_or_else(|| p.max_time());
+        let max_mem = opts.memory_limit.unwrap_or_else(|| p.max_mem());
+        if opts.time_limit.is_none()
+            && p.cases.iter().any(|c| c.time_limit != max_time)
+        {
             warnings.push(format!("各测试点时限不一致，已统一取最大值 {max_time}s"));
         }
-        if p.cases.iter().any(|c| c.memory_limit != max_mem) {
+        if opts.memory_limit.is_none()
+            && p.cases.iter().any(|c| c.memory_limit != max_mem)
+        {
             warnings.push(format!(
                 "各测试点内存限制不一致，已统一取最大值 {max_mem}MB"
             ));
@@ -70,7 +82,11 @@ pub fn build_config_yaml(p: &Problem, opts: &HydroOptions) -> (String, Vec<Strin
     yaml.push_str(&format!("type: {ty}\n"));
     yaml.push_str(&format!("time: {time_ms}\n"));
     yaml.push_str(&format!("memory: {memory_mb}\n"));
-    yaml.push_str(&format!("filename: {}\n", io_filename(p)));
+    let filename = match &opts.target_id {
+        Some(id) => id.clone(),
+        None => io_filename(p).to_string(),
+    };
+    yaml.push_str(&format!("filename: {filename}\n"));
     yaml.push_str(&format!("checker_type: {checker_type}\n"));
     if let Some(line) = checker_line {
         yaml.push_str(&line);
@@ -112,26 +128,19 @@ pub fn export_problem_hydro(
         return Ok(ExportItem {
             zip_path: None,
             skipped: true,
-            warnings: vec![format!(
-                "{}，V1 不支持转换，已跳过",
-                match p.kind {
-                    ProblemKind::AnswersOnly => "提交答案题",
-                    ProblemKind::Interactive => "交互题",
-                    ProblemKind::Unknown => "未知类型题",
-                    ProblemKind::Traditional => unreachable!(),
-                }
-            )],
+            warnings: vec![format!("{}，V1 不支持转换，已跳过", p.kind.display_name())],
         });
     }
 
+    let display_name = opts.target_id.as_deref().unwrap_or(&p.name).to_string();
     let (config_yaml, mut warnings) = build_config_yaml(p, opts);
     warnings.extend(p.warnings.iter().cloned());
 
     std::fs::create_dir_all(out_dir)?;
-    let zip_path = out_dir.join(format!("{}.zip", p.name));
+    let zip_path = out_dir.join(format!("{display_name}.zip"));
     let file = std::fs::File::create(&zip_path)?;
     let mut zip = zip::ZipWriter::new(file);
-    let prefix = format!("{}/", p.name);
+    let prefix = format!("{display_name}/");
 
     ziputil::write_entry(&mut zip, &format!("{prefix}problem.yaml"), build_problem_yaml(p).as_bytes())?;
     ziputil::write_entry(&mut zip, &format!("{prefix}problem_zh.md"), build_statement_md(p).as_bytes())?;
@@ -278,6 +287,7 @@ mod tests {
         let a = problem_with("A", &[1.0], &[128.0], Some("A.in"));
         let opts = HydroOptions {
             checker_override: Some("testlib".to_string()),
+            ..HydroOptions::default()
         };
         let (yaml, _) = build_config_yaml(&a, &opts);
         assert!(yaml.contains("checker_type: testlib\n"));

@@ -14,6 +14,18 @@ pub enum ProblemKind {
     Unknown,
 }
 
+impl ProblemKind {
+    /// 中文名（用于跳过警告等用户可见文案）。
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            ProblemKind::Traditional => "传统题",
+            ProblemKind::AnswersOnly => "提交答案题",
+            ProblemKind::Interactive => "交互题",
+            ProblemKind::Unknown => "未知类型题",
+        }
+    }
+}
+
 /// 单个测试点（文件相对 `data/<题名>/`）。
 #[derive(Debug, Clone, Serialize)]
 pub struct TestCase {

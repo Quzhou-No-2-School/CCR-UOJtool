@@ -4,10 +4,16 @@ use crate::engine::model::{EngineError, ExportItem, Problem, ProblemKind};
 use crate::engine::ziputil;
 use std::path::Path;
 
-/// UOJ 导出选项（用户可在 UI 覆盖 checker）。
+/// UOJ 导出选项（用户可在 UI 覆盖 checker / 题号 / 限制）。
 #[derive(Debug, Clone, Default)]
 pub struct UojOptions {
     pub checker_override: Option<String>,
+    /// 覆盖题号（input_pre/output_pre 与 zip 文件名）。
+    pub target_id: Option<String>,
+    /// 覆盖统一时限（秒，非整数会再次上取整）。
+    pub time_limit: Option<f64>,
+    /// 覆盖统一内存（MB，非整数上取整）。
+    pub memory_limit: Option<f64>,
 }
 
 /// 单题 UOJ 导出结果。
@@ -46,32 +52,35 @@ pub fn build_problem_conf(p: &Problem, opts: &UojOptions) -> (String, Vec<String
         }
     };
 
-    // 统一限制取最大值（D3），各点不一致时警告。
-    let (time_limit, mem_limit) = if p.cases.is_empty() {
+    // 统一限制取最大值（D3），各点不一致时警告；用户覆盖优先。
+    let (time_limit, mem_limit) = if let (Some(t), Some(m)) = (opts.time_limit, opts.memory_limit)
+    {
+        (ceil_warn(t, "时限", "s", &mut warnings), ceil_warn(m, "内存限制", "MB", &mut warnings))
+    } else if p.cases.is_empty() {
         warnings.push("该题没有测试点，使用默认限制 1s/128MB".to_string());
         (1, 128)
     } else {
-        let max_time = p.max_time();
-        let max_mem = p.max_mem();
-        if p.cases.iter().any(|c| c.time_limit != max_time) {
+        let max_time = opts.time_limit.unwrap_or_else(|| p.max_time());
+        let max_mem = opts.memory_limit.unwrap_or_else(|| p.max_mem());
+        if opts.time_limit.is_none()
+            && p.cases.iter().any(|c| c.time_limit != max_time)
+        {
             warnings.push(format!("各测试点时限不一致，已统一取最大值 {max_time}s"));
         }
-        if p.cases.iter().any(|c| c.memory_limit != max_mem) {
+        if opts.memory_limit.is_none()
+            && p.cases.iter().any(|c| c.memory_limit != max_mem)
+        {
             warnings.push(format!(
                 "各测试点内存限制不一致，已统一取最大值 {max_mem}MB"
             ));
         }
-        let t = max_time.ceil() as i64;
-        if t as f64 != max_time {
-            warnings.push(format!("时限上取整：{max_time}s → {t}s"));
-        }
-        let m = max_mem.ceil() as i64;
-        if m as f64 != max_mem {
-            warnings.push(format!("内存限制上取整：{max_mem}MB → {m}MB"));
-        }
-        (t, m)
+        (
+            ceil_warn(max_time, "时限", "s", &mut warnings),
+            ceil_warn(max_mem, "内存限制", "MB", &mut warnings),
+        )
     };
 
+    let display_name = opts.target_id.as_deref().unwrap_or(&p.name);
     let n = p.cases.len();
     let conf = format!(
         "use_builtin_judger on\n\
@@ -86,9 +95,18 @@ pub fn build_problem_conf(p: &Problem, opts: &UojOptions) -> (String, Vec<String
          time_limit {time_limit}\n\
          memory_limit {mem_limit}\n\
          output_limit 64\n",
-        name = p.name
+        name = display_name
     );
     (conf, warnings)
+}
+
+/// 上取整为整数，非整数时附加警告。
+fn ceil_warn(value: f64, label: &str, unit: &str, warnings: &mut Vec<String>) -> i64 {
+    let v = value.ceil() as i64;
+    if v as f64 != value {
+        warnings.push(format!("{label}上取整：{value}{unit} → {v}{unit}"));
+    }
+    v
 }
 
 /// 把单题导出为 UOJ 扁平 zip：`out_dir/<题名>.zip`，根层级含 problem.conf 与
@@ -104,23 +122,24 @@ pub fn export_problem_uoj(
         return Ok(UojExportItem {
             zip_path: None,
             skipped: true,
-            warnings: vec![format!("{}，V1 不支持转换，已跳过", kind_name(p.kind))],
+            warnings: vec![format!("{}，V1 不支持转换，已跳过", p.kind.display_name())],
         });
     }
 
+    let display_name = opts.target_id.as_deref().unwrap_or(&p.name).to_string();
     let (conf, mut warnings) = build_problem_conf(p, opts);
     warnings.extend(p.warnings.iter().cloned());
 
     std::fs::create_dir_all(out_dir)?;
-    let zip_path = out_dir.join(format!("{}.zip", p.name));
+    let zip_path = out_dir.join(format!("{display_name}.zip"));
     let file = std::fs::File::create(&zip_path)?;
     let mut zip = zip::ZipWriter::new(file);
 
     ziputil::write_entry(&mut zip, "problem.conf", conf.as_bytes())?;
     let data_dir = contest_path.join("data").join(&p.name);
     for (i, case) in p.cases.iter().enumerate() {
-        let in_name = format!("{}{}.in", p.name, i + 1);
-        let out_name = format!("{}{}.out", p.name, i + 1);
+        let in_name = format!("{display_name}{}.in", i + 1);
+        let out_name = format!("{display_name}{}.out", i + 1);
         ziputil::copy_file_into_zip(&mut zip, &in_name, &data_dir.join(&case.in_file))?;
         ziputil::copy_file_into_zip(&mut zip, &out_name, &data_dir.join(&case.out_file))?;
     }
@@ -131,16 +150,6 @@ pub fn export_problem_uoj(
         skipped: false,
         warnings,
     })
-}
-
-/// 题目类型的中文名（用于跳过警告）。
-fn kind_name(kind: ProblemKind) -> &'static str {
-    match kind {
-        ProblemKind::Traditional => "传统题",
-        ProblemKind::AnswersOnly => "提交答案题",
-        ProblemKind::Interactive => "交互题",
-        ProblemKind::Unknown => "未知类型题",
-    }
 }
 
 #[cfg(test)]
@@ -231,6 +240,7 @@ mod tests {
         let p = problem_with("P", &[1.0], &[128.0]);
         let opts = UojOptions {
             checker_override: Some("nonte xt".to_string()),
+            ..UojOptions::default()
         };
         let (conf, warnings) = build_problem_conf(&p, &opts);
         assert!(conf.contains("use_builtin_checker nonte xt\n"));

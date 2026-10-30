@@ -44,7 +44,93 @@ pub fn export_contest(
     out_dir: &std::path::Path,
     opts: &ExportOptions,
 ) -> Result<ExportReport, EngineError> {
-    todo!()
+    std::fs::create_dir_all(out_dir)?;
+    let mut items = Vec::new();
+
+    for p in &contest.problems {
+        let edit = opts.edits.iter().find(|e| e.name == p.name);
+
+        // 用户禁用 → 跳过（不产 zip）。
+        if edit.is_some_and(|e| !e.enabled) {
+            let mut rep = base_report(p, "skipped");
+            rep.skipped = true;
+            rep.warnings
+                .push("已被用户禁用，未导出".to_string());
+            items.push(rep);
+            continue;
+        }
+
+        // ANS / INT（D7）：跳过，只出现在报告中。
+        if p.kind != ProblemKind::Traditional {
+            let mut rep = base_report(p, "skipped");
+            rep.skipped = true;
+            rep.warnings.push(format!(
+                "{}，V1 不支持转换，已跳过",
+                p.kind.display_name()
+            ));
+            items.push(rep);
+            continue;
+        }
+
+        let (uoj_opts, hydro_opts) = build_target_options(edit);
+
+        if matches!(target, Target::Uoj | Target::Both) {
+            let mut rep = base_report(p, "uoj");
+            match uoj::export_problem_uoj(p, &contest.path, &out_dir.join("uoj"), &uoj_opts) {
+                Ok(item) => {
+                    rep.zip_path = item.zip_path.map(|z| z.display().to_string());
+                    rep.skipped = item.skipped;
+                    rep.warnings = item.warnings;
+                }
+                Err(e) => rep.errors.push(e.to_string()),
+            }
+            items.push(rep);
+        }
+        if matches!(target, Target::Hydro | Target::Both) {
+            let mut rep = base_report(p, "hydro");
+            match hydro::export_problem_hydro(
+                p,
+                &contest.path,
+                &out_dir.join("hydro"),
+                &hydro_opts,
+            ) {
+                Ok(item) => {
+                    rep.zip_path = item.zip_path.map(|z| z.display().to_string());
+                    rep.skipped = item.skipped;
+                    rep.warnings = item.warnings;
+                }
+                Err(e) => rep.errors.push(e.to_string()),
+            }
+            items.push(rep);
+        }
+    }
+
+    Ok(ExportReport { items })
+}
+
+/// 把用户编辑合并进两个目标的导出选项。
+fn build_target_options(
+    edit: Option<&ProblemEditDto>,
+) -> (uoj::UojOptions, hydro::HydroOptions) {
+    let edit = edit.filter(|e| e.enabled);
+    let target_id = edit.and_then(|e| e.target_id.clone()).filter(|s| !s.is_empty());
+    let checker = edit.and_then(|e| e.checker.clone()).filter(|s| !s.is_empty());
+    let time = edit.and_then(|e| e.time_limit);
+    let mem = edit.and_then(|e| e.memory_limit);
+    (
+        uoj::UojOptions {
+            checker_override: checker.clone(),
+            target_id: target_id.clone(),
+            time_limit: time,
+            memory_limit: mem,
+        },
+        hydro::HydroOptions {
+            checker_override: checker,
+            target_id,
+            time_limit: time,
+            memory_limit: mem,
+        },
+    )
 }
 
 /// 构造单题报告骨架。
