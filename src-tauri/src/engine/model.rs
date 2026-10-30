@@ -2,7 +2,7 @@
 //!
 //! 引擎内所有阶段（发现、解析、导出）共享这些类型。
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 /// CCR 题目类型（对应 `.prb` 根节点 `type` 属性，见计划 0.2）。
@@ -100,6 +100,23 @@ pub struct ExportItem {
     pub zip_path: Option<PathBuf>,
     pub skipped: bool,
     pub warnings: Vec<String>,
+}
+
+/// 每题用户编辑（IPC DTO，前端可只传部分题目）。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProblemEditDto {
+    /// 对应题目目录名。
+    pub name: String,
+    /// 覆盖题号（UOJ input_pre / Hydro filename 与 zip 文件名）。
+    pub target_id: Option<String>,
+    /// 覆盖统一时限（秒）。
+    pub time_limit: Option<f64>,
+    /// 覆盖统一内存（MB）。
+    pub memory_limit: Option<f64>,
+    /// 覆盖 checker（UOJ use_builtin_checker / Hydro checker_type）。
+    pub checker: Option<String>,
+    /// 是否导出该题。
+    pub enabled: bool,
 }
 
 #[cfg(test)]
