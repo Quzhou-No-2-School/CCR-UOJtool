@@ -3,7 +3,20 @@
 //! 引擎内所有阶段（发现、解析、导出）共享这些类型。
 
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+
+/// 是否为安全的单段文件名（终审 I1）。
+///
+/// 拒绝：空值、含 `/` 或 `\`、含 `..` 子串、绝对路径（`Path::file_name` 不等于原值）。
+/// `.prb` 测试点文件名与用户编辑的题号都必须经过此检查，
+/// 防止 `dir.join("../x")` / `join("/abs")` 把目录外文件带进导出包。
+pub fn is_safe_file_name(v: &str) -> bool {
+    !v.is_empty()
+        && !v.contains('/')
+        && !v.contains('\\')
+        && !v.contains("..")
+        && Path::new(v).file_name() == Some(Path::new(v).as_os_str())
+}
 
 /// CCR 题目类型（对应 `.prb` 根节点 `type` 属性，见计划 0.2）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

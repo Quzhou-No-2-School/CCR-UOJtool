@@ -1,7 +1,9 @@
 //! 比赛组装：读 `.ccr` 顺序、扫描 `data/` 目录、`.prb` 解析与 discover 对账、无配置降级（D6）。
 
 use crate::engine::discover::discover_cases;
-use crate::engine::model::{Contest, Problem, ProblemKind, TestCase};
+use crate::engine::model::{
+    is_safe_file_name, Contest, Problem, ProblemKind, TestCase,
+};
 use crate::engine::prb::{parse_prb, strip_extension};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -111,6 +113,18 @@ fn build_from_prb(name: &str, dir: &Path, opts: &ScanOptions) -> Problem {
             let mut listed: HashSet<String> = HashSet::new();
             for (score, points) in &cfg.subtasks {
                 for pt in points {
+                    // 终审 I1：拒绝路径穿越 / 绝对路径 / 反斜杠文件名，防目录外文件外泄。
+                    if !is_safe_file_name(&pt.in_file) || !is_safe_file_name(&pt.out_file) {
+                        warnings.push(format!(
+                            "测试点文件名非法，已跳过: {}",
+                            if is_safe_file_name(&pt.in_file) {
+                                pt.out_file.clone()
+                            } else {
+                                pt.in_file.clone()
+                            }
+                        ));
+                        continue;
+                    }
                     listed.insert(pt.in_file.clone());
                     listed.insert(pt.out_file.clone());
                     if !dir.join(&pt.in_file).is_file() || !dir.join(&pt.out_file).is_file() {

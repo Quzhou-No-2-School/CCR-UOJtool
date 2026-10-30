@@ -11,7 +11,7 @@ pub mod ziputil;
 
 pub use report::{ExportReport, ProblemReport};
 
-use model::{Contest, EngineError, Problem, ProblemEditDto, ProblemKind};
+use model::{is_safe_file_name, Contest, EngineError, Problem, ProblemEditDto, ProblemKind};
 
 /// 导出目标格式。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -72,7 +72,7 @@ pub fn export_contest(
             continue;
         }
 
-        let (uoj_opts, hydro_opts) = build_target_options(edit);
+        let (uoj_opts, hydro_opts, sanitize_warnings) = build_target_options(edit, &p.name);
 
         if matches!(target, Target::Uoj | Target::Both) {
             let mut rep = base_report(p, "uoj");
@@ -84,6 +84,7 @@ pub fn export_contest(
                 }
                 Err(e) => rep.errors.push(e.to_string()),
             }
+            rep.warnings.extend(sanitize_warnings.iter().cloned());
             items.push(rep);
         }
         if matches!(target, Target::Hydro | Target::Both) {
@@ -101,6 +102,7 @@ pub fn export_contest(
                 }
                 Err(e) => rep.errors.push(e.to_string()),
             }
+            rep.warnings.extend(sanitize_warnings.iter().cloned());
             items.push(rep);
         }
     }
@@ -109,11 +111,26 @@ pub fn export_contest(
 }
 
 /// 把用户编辑合并进两个目标的导出选项。
+///
+/// 终审 I1：target_id 会成为 zip 文件名 / 包内路径前缀，必须消毒——
+/// 含路径分隔符、`..` 或为绝对路径时警告并回退题名（返回 None 即兜底）。
 fn build_target_options(
     edit: Option<&ProblemEditDto>,
-) -> (uoj::UojOptions, hydro::HydroOptions) {
+    fallback_name: &str,
+) -> (uoj::UojOptions, hydro::HydroOptions, Vec<String>) {
     let edit = edit.filter(|e| e.enabled);
-    let target_id = edit.and_then(|e| e.target_id.clone()).filter(|s| !s.is_empty());
+    let mut sanitize_warnings = Vec::new();
+    let raw_target_id = edit.and_then(|e| e.target_id.clone()).filter(|s| !s.is_empty());
+    let target_id = match raw_target_id {
+        Some(id) if is_safe_file_name(&id) => Some(id),
+        Some(id) => {
+            sanitize_warnings.push(format!(
+                "题号 {id:?} 含非法字符，已回退为题名 {fallback_name}"
+            ));
+            None
+        }
+        None => None,
+    };
     let checker = edit.and_then(|e| e.checker.clone()).filter(|s| !s.is_empty());
     let time = edit.and_then(|e| e.time_limit);
     let mem = edit.and_then(|e| e.memory_limit);
@@ -130,6 +147,7 @@ fn build_target_options(
             time_limit: time,
             memory_limit: mem,
         },
+        sanitize_warnings,
     )
 }
 
