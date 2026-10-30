@@ -2,7 +2,9 @@
 //!
 //! yaml 用字符串模板手工拼接，不引入 serde_yaml，保持确定性输出顺序。
 
-use crate::engine::model::{EngineError, ExportItem, Problem, ProblemKind};
+use crate::engine::model::{
+    is_checker_source, EngineError, ExportItem, Problem, ProblemKind,
+};
 use crate::engine::ziputil;
 use std::path::Path;
 
@@ -63,11 +65,20 @@ pub fn build_config_yaml(p: &Problem, opts: &HydroOptions) -> (String, Vec<Strin
         (t, m)
     };
 
-    // checker_type：用户覆盖 > 自定义校验器映射 ccr（0.7 表）> default。
+    // checker_type：用户覆盖 > 自定义校验器源码映射 ccr（0.7 表）> default。
+    // 终审 I2：非源码校验器（如 CCR 编译的 ELF 产物）不能映射 ccr，回退 default 并警告。
     let (checker_type, checker_line) = match &opts.checker_override {
         Some(o) => (o.clone(), None),
         None => match &p.custom_checker {
-            Some(file) => ("ccr".to_string(), Some(format!("checker: {file}\n"))),
+            Some(file) if is_checker_source(file) => {
+                ("ccr".to_string(), Some(format!("checker: {file}\n")))
+            }
+            Some(file) => {
+                warnings.push(format!(
+                    "自定义校验器 {file} 非源码，Hydro 无法直接复用，已回退 default 校验"
+                ));
+                ("default".to_string(), None)
+            }
             None => ("default".to_string(), None),
         },
     };
@@ -157,13 +168,16 @@ pub fn export_problem_hydro(
         ziputil::copy_file_into_zip(&mut zip, &in_name, &data_dir.join(&case.in_file))?;
         ziputil::copy_file_into_zip(&mut zip, &out_name, &data_dir.join(&case.out_file))?;
     }
-    // 自定义校验器：有源码则一并复制进 testdata/（config.yaml 的 checker 指向它，0.7 表）。
+    // 自定义校验器：有源码才复制进 testdata/（config.yaml 的 checker 指向它，0.7 表）。
+    // 终审 I2：非源码产物（如 ELF 二进制）不复制，警告已由 build_config_yaml 生成。
     if let Some(file) = &p.custom_checker {
-        ziputil::copy_file_into_zip(
-            &mut zip,
-            &format!("{prefix}testdata/{file}"),
-            &data_dir.join(file),
-        )?;
+        if is_checker_source(file) {
+            ziputil::copy_file_into_zip(
+                &mut zip,
+                &format!("{prefix}testdata/{file}"),
+                &data_dir.join(file),
+            )?;
+        }
     }
     zip.finish()?;
 

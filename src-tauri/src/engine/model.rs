@@ -18,6 +18,14 @@ pub fn is_safe_file_name(v: &str) -> bool {
         && Path::new(v).file_name() == Some(Path::new(v).as_os_str())
 }
 
+/// 自定义校验器可接受的源码扩展名（C/C++，与 CCR 编译源一致）。
+pub const CHECKER_SOURCE_EXTS: &[&str] = &[".cpp", ".cc", ".cxx", ".c"];
+
+/// 是否为校验器源码文件（终审 I2：排除 CCR 编译出的 ELF 二进制等产物）。
+pub fn is_checker_source(file: &str) -> bool {
+    CHECKER_SOURCE_EXTS.iter().any(|ext| file.ends_with(ext))
+}
+
 /// CCR 题目类型（对应 `.prb` 根节点 `type` 属性，见计划 0.2）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ProblemKind {

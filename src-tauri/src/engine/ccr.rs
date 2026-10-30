@@ -2,7 +2,8 @@
 
 use crate::engine::discover::discover_cases;
 use crate::engine::model::{
-    is_safe_file_name, Contest, Problem, ProblemKind, TestCase,
+    is_checker_source, is_safe_file_name, CHECKER_SOURCE_EXTS, Contest, Problem, ProblemKind,
+    TestCase,
 };
 use crate::engine::prb::{parse_prb, strip_extension};
 use std::collections::HashSet;
@@ -107,7 +108,9 @@ fn build_from_prb(name: &str, dir: &Path, opts: &ScanOptions) -> Problem {
             let (pairs, discover_warnings) = discover_cases(dir);
             warnings.extend(discover_warnings);
 
-            let custom_checker = find_custom_checker(dir, cfg.checker.as_deref());
+            let (custom_checker, checker_warnings) =
+                find_custom_checker(dir, cfg.checker.as_deref());
+            warnings.extend(checker_warnings);
 
             let mut cases = Vec::new();
             let mut listed: HashSet<String> = HashSet::new();
@@ -235,29 +238,46 @@ fn warn_if_uneven(problem: &mut Problem) {
     }
 }
 
-/// 在题目目录中找 prb checker 对应的自定义校验器源文件（文件名主干与 checker 名一致）。
-fn find_custom_checker(dir: &Path, checker: Option<&str>) -> Option<String> {
-    let checker = checker?;
-    std::fs::read_dir(dir)
-        .ok()?
+/// 在题目目录中找 prb checker 对应的自定义校验器文件（文件名主干与 checker 名一致）。
+///
+/// 终审 I2：只有 C/C++ 源码才算可复用校验器；主干匹配但非源码（如 CCR 编译出的
+/// ELF 产物）时仍记录文件名（供 UOJ 侧提示人工适配），但发"非源码"警告。
+fn find_custom_checker(dir: &Path, checker: Option<&str>) -> (Option<String>, Vec<String>) {
+    let Some(checker) = checker else {
+        return (None, Vec::new());
+    };
+    let mut warnings = Vec::new();
+    let mut matches: Vec<String> = std::fs::read_dir(dir)
+        .into_iter()
+        .flatten()
         .flatten()
         .map(|e| e.path())
         .filter(|p| p.is_file())
-        .find(|p| {
+        .filter_map(|p| {
             p.file_name()
                 .and_then(|n| n.to_str())
-                .map(|n| n != ".prb" && strip_extension(n) == checker)
-                .unwrap_or(false)
+                .filter(|n| *n != ".prb" && strip_extension(n) == checker)
+                .map(|n| n.to_string())
         })
-        .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
+        .collect();
+    matches.sort();
+
+    if let Some(src) = matches.iter().find(|m| is_checker_source(m)) {
+        return (Some(src.clone()), warnings);
+    }
+    if let Some(bin) = matches.first() {
+        warnings.push(format!(
+            "自定义校验器 {bin} 非源码，Hydro 无法直接复用，将回退 default 校验"
+        ));
+    }
+    (matches.first().cloned(), warnings)
 }
 
 /// 降级目录中按常见命名找自定义校验器源文件（checker/val + C/C++ 扩展名）。
 fn find_custom_checker_source(dir: &Path) -> Option<String> {
     const STEMS: &[&str] = &["checker", "val"];
-    const EXTS: &[&str] = &[".cpp", ".cc", ".cxx", ".c"];
     for stem in STEMS {
-        for ext in EXTS {
+        for ext in CHECKER_SOURCE_EXTS {
             let candidate = format!("{stem}{ext}");
             if dir.join(&candidate).is_file() {
                 return Some(candidate);
