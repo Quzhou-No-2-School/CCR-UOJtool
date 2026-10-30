@@ -148,6 +148,14 @@ pub fn export_problem_hydro(
         ziputil::copy_file_into_zip(&mut zip, &in_name, &data_dir.join(&case.in_file))?;
         ziputil::copy_file_into_zip(&mut zip, &out_name, &data_dir.join(&case.out_file))?;
     }
+    // 自定义校验器：有源码则一并复制进 testdata/（config.yaml 的 checker 指向它，0.7 表）。
+    if let Some(file) = &p.custom_checker {
+        ziputil::copy_file_into_zip(
+            &mut zip,
+            &format!("{prefix}testdata/{file}"),
+            &data_dir.join(file),
+        )?;
+    }
     zip.finish()?;
 
     Ok(ExportItem {
@@ -407,5 +415,31 @@ mod tests {
         assert!(item.zip_path.is_none());
         assert!(!out_dir.join("D.zip").exists());
         assert!(item.warnings.iter().any(|w| w.contains("提交答案题")));
+    }
+
+    #[test]
+    fn custom_checker_source_copied_into_testdata() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let (mut c, contest_path) = fixture_on_disk(&tmp, "C", 2);
+        c.custom_checker = Some("checker.cpp".to_string());
+        // 真实的校验器源文件（会作为 testdata/checker.cpp 打进包）
+        let src = contest_path.join("data/C/checker.cpp");
+        std::fs::write(&src, "// checker.cpp source\n").unwrap();
+        let out_dir = tmp.path().join("out");
+
+        let item = export_problem_hydro(&c, &contest_path, &out_dir, &HydroOptions::default())
+            .unwrap();
+        assert!(!item.skipped);
+
+        let f = std::fs::File::open(item.zip_path.unwrap()).unwrap();
+        let mut archive = zip::ZipArchive::new(f).unwrap();
+        let mut s = String::new();
+        use std::io::Read;
+        archive
+            .by_name("C/testdata/checker.cpp")
+            .unwrap()
+            .read_to_string(&mut s)
+            .unwrap();
+        assert_eq!(s, "// checker.cpp source\n");
     }
 }
