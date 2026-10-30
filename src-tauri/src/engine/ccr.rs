@@ -2,8 +2,8 @@
 
 use crate::engine::discover::discover_cases;
 use crate::engine::model::{
-    is_checker_source, is_safe_file_name, CHECKER_SOURCE_EXTS, Contest, Problem, ProblemKind,
-    TestCase,
+    CHECKER_SOURCE_EXTS, Contest, Problem, ProblemKind, TestCase, is_checker_source,
+    is_safe_file_name,
 };
 use crate::engine::prb::{parse_prb, strip_extension};
 use std::collections::HashSet;
@@ -29,7 +29,10 @@ impl Default for ScanOptions {
 pub fn scan_contest(path: &Path, opts: &ScanOptions) -> Result<Contest, String> {
     let data_dir = path.join("data");
     if !data_dir.is_dir() {
-        return Err(format!("{} 缺少 data 目录，不是 CCR-Plus 比赛目录", path.display()));
+        return Err(format!(
+            "{} 缺少 data 目录，不是 CCR-Plus 比赛目录",
+            path.display()
+        ));
     }
     let name = path
         .file_name()
@@ -64,7 +67,12 @@ pub fn scan_contest(path: &Path, opts: &ScanOptions) -> Result<Contest, String> 
     }
 
     // 4. 排序：`.ccr` 顺序优先，未列入者排后面（稳定排序保持字母序）。
-    problems.sort_by_key(|p| order.iter().position(|n| n == &p.name).unwrap_or(usize::MAX));
+    problems.sort_by_key(|p| {
+        order
+            .iter()
+            .position(|n| n == &p.name)
+            .unwrap_or(usize::MAX)
+    });
 
     Ok(Contest {
         name,
@@ -166,9 +174,7 @@ fn build_from_prb(name: &str, dir: &Path, opts: &ScanOptions) -> Problem {
             problem
         }
         Err(e) => {
-            warnings.push(format!(
-                "解析 .prb 失败（{e}），已按传统题降级解析该目录"
-            ));
+            warnings.push(format!("解析 .prb 失败（{e}），已按传统题降级解析该目录"));
             let mut problem = build_degraded(name, dir, opts);
             problem.warnings.splice(0..0, warnings);
             problem
@@ -200,14 +206,8 @@ fn build_degraded(name: &str, dir: &Path, opts: &ScanOptions) -> Problem {
         .iter()
         .enumerate()
         .map(|(k, (in_path, out_path))| TestCase {
-            in_file: in_path
-                .file_name()
-                .map(PathBuf::from)
-                .unwrap_or_default(),
-            out_file: out_path
-                .file_name()
-                .map(PathBuf::from)
-                .unwrap_or_default(),
+            in_file: in_path.file_name().map(PathBuf::from).unwrap_or_default(),
+            out_file: out_path.file_name().map(PathBuf::from).unwrap_or_default(),
             time_limit: opts.default_time,
             memory_limit: opts.default_mem,
             score: scores[k] as u32,

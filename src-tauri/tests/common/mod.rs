@@ -87,7 +87,8 @@ fn build_problem_b(data: &Path) {
         write_pair(&dir, &format!("B{i}.inp"), &format!("B{i}.ans"));
         points.push_str(&format!(
             r#"            <point in="B{i}.inp" out="B{i}.ans" time="{}" mem="{}"/>"#,
-            times[i - 1], mems[i - 1],
+            times[i - 1],
+            mems[i - 1],
         ));
         points.push('\n');
     }
