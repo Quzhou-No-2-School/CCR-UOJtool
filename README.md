@@ -73,3 +73,56 @@ CCR-UOJtool 读取的是 CCR-Plus 评测后的比赛目录，结构如下（`src
 ├── src/                    # 选手代码（本工具忽略）
 └── result/                 # 评测结果（本工具忽略）
 ```
+
+## 支持的输入格式
+
+CCR-Plus 比赛目录（或其 zip 打包）：
+
+- **题目顺序**：来自比赛目录下的 `.ccr` 文件（XML）；缺失时按目录名字母序排列。
+- **题目识别**：`data/` 下每道题一个目录，目录内的 `.prb` 文件（XML）记录题目配置；没有 `.prb` 的目录不会被判为题目。
+- **测试点配对**：输入文件扩展名 `.in`/`.inp`（含无点形式），输出文件扩展名 `.out`/`.ans`/`.sol`/`.res`/`.std` 等，前后缀一致即配对成一对测试点。
+- **每测试点独立限制**：`.prb` 中每个测试点可单独设置时限（秒）与内存（MB），本工具统一取最大值，并在各点不一致时给出警告。
+- **自动降级**：未配置 `.prb` 的目录按传统题降级解析（默认 fulltext 校验、时限/内存取默认值 1s/128MB），并在报告中提示"该目录未在 CCR 中配置"。
+
+## 支持的输出格式
+
+### UOJ 经典格式
+
+扁平 zip（**不要子目录**），根层级包含 `problem.conf` 与全部测试点文件。生成的 `problem.conf` 各字段：
+
+| 字段 | 含义 |
+|---|---|
+| `use_builtin_judger` | 固定 `on`，使用 UOJ 内置评测器 |
+| `use_builtin_checker` | 比较器：CCR `fulltext`（过滤行末空格及文末回车）映射为 `lcmp`（逐行比较）；可在界面改为 `wcmp`/`ncmp`/`rcmp4` 等 |
+| `n_tests` | 测试点数量 |
+| `n_ex_tests` / `n_sample_tests` | 固定 `0`（本工具不生成额外/样例测试点，见已知限制） |
+| `input_pre` / `input_suf` | 输入文件名前缀/后缀，如 `A` + `in` → `A1.in` |
+| `output_pre` / `output_suf` | 输出文件名前缀/后缀 |
+| `time_limit` | 时限（秒，整数）；各测试点不一致时取最大值并上取整 |
+| `memory_limit` | 内存限制（MB） |
+| `output_limit` | 输出限制（MB），固定 `64` |
+
+### Hydro 格式
+
+zip 内保留一层题名文件夹：
+
+```
+<题名>/
+├── problem.yaml            # 题目元信息（title 等）
+├── problem_zh.md           # Markdown 题面（占位模板，需人工补充）
+└── testdata/
+    ├── config.yaml         # 测试数据配置
+    ├── 1.in / 1.out        # 重命名后的测试点
+    └── ...
+```
+
+`testdata/config.yaml` 关键字段：
+
+| 字段 | 含义 |
+|---|---|
+| `type` | `default`（传统题） |
+| `time` | 时限，毫秒整数（各点不一致时取最大值） |
+| `memory` | 内存限制（MB） |
+| `filename` | 文件 IO 前缀（来自 CCR 的 `<task input>`，去掉 `.in`；标准 IO 则无此项） |
+| `checker_type` | CCR `fulltext` 映射为 `default`；有自定义校验器源码时为 `ccr`（Hydro 内置支持，可直接复用） |
+| `cases` | 显式列出每个测试点的 input/output |
