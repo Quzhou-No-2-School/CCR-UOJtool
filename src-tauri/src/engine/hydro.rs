@@ -2,13 +2,18 @@
 //!
 //! yaml 用字符串模板手工拼接，不引入 serde_yaml，保持确定性输出顺序。
 
-use crate::engine::model::{Problem, ProblemKind};
+use crate::engine::model::{EngineError, ExportItem, Problem, ProblemKind};
+use crate::engine::ziputil;
+use std::path::Path;
 
 /// Hydro 导出选项（用户可覆盖 checker_type）。
 #[derive(Debug, Clone, Default)]
 pub struct HydroOptions {
     pub checker_override: Option<String>,
 }
+
+/// 单题 Hydro 导出结果。
+pub type HydroExportItem = ExportItem;
 
 /// 文件 IO 前缀：`<task input>` 去扩展名（如 "A.in" → "A"），缺省回退题目录名（0.7 表）。
 fn io_filename(p: &Problem) -> &str {
@@ -91,6 +96,18 @@ pub fn build_statement_md(p: &Problem) -> String {
          输入输出格式与样例。\n",
         name = p.name
     )
+}
+
+/// 把单题导出为 Hydro 包 zip：`out_dir/<题名>.zip`，内含一层题名文件夹
+/// `<题名>/problem.yaml`、`<题名>/problem_zh.md`、`<题名>/testdata/config.yaml`
+/// 与 `<题名>/testdata/<i>.in/.out`（0.5 结构）。非传统题按 D7 跳过。
+pub fn export_problem_hydro(
+    p: &Problem,
+    contest_path: &Path,
+    out_dir: &Path,
+    opts: &HydroOptions,
+) -> Result<HydroExportItem, EngineError> {
+    todo!()
 }
 
 #[cfg(test)]
@@ -223,5 +240,125 @@ mod tests {
         let p = problem_with("X", &[1.0], &[128.0], None);
         let (yaml, _) = build_config_yaml(&p, &HydroOptions::default());
         assert!(yaml.contains("filename: X\n"));
+    }
+
+    /// 构造含真实数据文件的题目目录：data/<name>/<name><i>.in/.out。
+    fn fixture_on_disk(
+        tmp: &tempfile::TempDir,
+        name: &str,
+        n: usize,
+    ) -> (Problem, std::path::PathBuf) {
+        let data_dir = tmp.path().join("data").join(name);
+        std::fs::create_dir_all(&data_dir).unwrap();
+        let cases = (1..=n)
+            .map(|i| {
+                let in_name = format!("{name}{i}.in");
+                let out_name = format!("{name}{i}.out");
+                std::fs::write(data_dir.join(&in_name), format!("{in_name}\n")).unwrap();
+                std::fs::write(data_dir.join(&out_name), format!("{out_name}\n")).unwrap();
+                TestCase {
+                    in_file: PathBuf::from(&in_name),
+                    out_file: PathBuf::from(&out_name),
+                    time_limit: 1.0,
+                    memory_limit: 128.0,
+                    score: 10,
+                }
+            })
+            .collect();
+        let problem = Problem {
+            name: name.to_string(),
+            kind: ProblemKind::Traditional,
+            in_file: None,
+            out_file: None,
+            checker: Some("fulltext".to_string()),
+            custom_checker: None,
+            cases,
+            warnings: Vec::new(),
+            prb_found: true,
+        };
+        (problem, tmp.path().to_path_buf())
+    }
+
+    #[test]
+    fn export_zip_with_problem_folder() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let (a, contest_path) = fixture_on_disk(&tmp, "A", 3);
+        let out_dir = tmp.path().join("out");
+
+        let item = export_problem_hydro(&a, &contest_path, &out_dir, &HydroOptions::default())
+            .unwrap();
+        assert!(!item.skipped);
+        let zip_path = item.zip_path.unwrap();
+        assert_eq!(zip_path, out_dir.join("A.zip"));
+
+        let f = std::fs::File::open(&zip_path).unwrap();
+        let mut archive = zip::ZipArchive::new(f).unwrap();
+
+        // 恰有 9 个条目：yaml ×2 + config + 3×(in/out)，保留一层题名文件夹。
+        let mut names: Vec<String> = archive.file_names().map(|s| s.to_string()).collect();
+        names.sort();
+        let mut expected = vec![
+            "A/problem.yaml".to_string(),
+            "A/problem_zh.md".to_string(),
+            "A/testdata/config.yaml".to_string(),
+        ];
+        for i in 1..=3 {
+            expected.push(format!("A/testdata/{i}.in"));
+            expected.push(format!("A/testdata/{i}.out"));
+        }
+        expected.sort();
+        assert_eq!(names, expected);
+
+        // 内容与生成函数一致、数据字节一致。
+        use std::io::Read;
+        let mut s = String::new();
+        archive
+            .by_name("A/problem.yaml")
+            .unwrap()
+            .read_to_string(&mut s)
+            .unwrap();
+        assert_eq!(s, build_problem_yaml(&a));
+
+        s.clear();
+        archive
+            .by_name("A/problem_zh.md")
+            .unwrap()
+            .read_to_string(&mut s)
+            .unwrap();
+        assert_eq!(s, build_statement_md(&a));
+
+        s.clear();
+        archive
+            .by_name("A/testdata/config.yaml")
+            .unwrap()
+            .read_to_string(&mut s)
+            .unwrap();
+        let (want, _) = build_config_yaml(&a, &HydroOptions::default());
+        assert_eq!(s, want);
+
+        for i in 1..=3 {
+            let mut data = String::new();
+            archive
+                .by_name(&format!("A/testdata/{i}.in"))
+                .unwrap()
+                .read_to_string(&mut data)
+                .unwrap();
+            assert_eq!(data, format!("A{i}.in\n"));
+        }
+    }
+
+    #[test]
+    fn answers_only_problem_is_skipped() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let (mut d, contest_path) = fixture_on_disk(&tmp, "D", 2);
+        d.kind = ProblemKind::AnswersOnly;
+        let out_dir = tmp.path().join("out");
+
+        let item = export_problem_hydro(&d, &contest_path, &out_dir, &HydroOptions::default())
+            .unwrap();
+        assert!(item.skipped);
+        assert!(item.zip_path.is_none());
+        assert!(!out_dir.join("D.zip").exists());
+        assert!(item.warnings.iter().any(|w| w.contains("提交答案题")));
     }
 }

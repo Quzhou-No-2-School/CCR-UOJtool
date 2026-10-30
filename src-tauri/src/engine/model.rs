@@ -93,6 +93,15 @@ pub enum EngineError {
     Other(String),
 }
 
+/// 单题导出结果（UOJ / Hydro 共用）。
+#[derive(Debug, Serialize)]
+pub struct ExportItem {
+    /// 产出的 zip 路径；跳过时为 None。
+    pub zip_path: Option<PathBuf>,
+    pub skipped: bool,
+    pub warnings: Vec<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

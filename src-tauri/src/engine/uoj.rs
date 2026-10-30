@@ -1,8 +1,7 @@
 //! UOJ 导出：`problem.conf` 生成与 checker 映射、扁平 zip 打包（计划 0.4 / 0.7）。
 
-use crate::engine::model::{EngineError, Problem, ProblemKind};
+use crate::engine::model::{EngineError, ExportItem, Problem, ProblemKind};
 use crate::engine::ziputil;
-use serde::Serialize;
 use std::path::{Path, PathBuf};
 
 /// UOJ 导出选项（用户可在 UI 覆盖 checker）。
@@ -12,13 +11,7 @@ pub struct UojOptions {
 }
 
 /// 单题 UOJ 导出结果。
-#[derive(Debug, Serialize)]
-pub struct UojExportItem {
-    /// 产出的 zip 路径；跳过时为 None。
-    pub zip_path: Option<PathBuf>,
-    pub skipped: bool,
-    pub warnings: Vec<String>,
-}
+pub type UojExportItem = ExportItem;
 
 /// CCR 内置校验器 → UOJ 内建 checker。
 /// 保守映射（计划 0.4 假设）：fulltext ≈ lcmp；未知值也映射 lcmp，由调用方附加警告。
