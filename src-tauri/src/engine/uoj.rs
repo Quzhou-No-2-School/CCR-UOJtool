@@ -1,11 +1,22 @@
-//! UOJ 导出：`problem.conf` 生成与 checker 映射（计划 0.4 / 0.7）。
+//! UOJ 导出：`problem.conf` 生成与 checker 映射、扁平 zip 打包（计划 0.4 / 0.7）。
 
-use crate::engine::model::Problem;
+use crate::engine::model::{EngineError, Problem, ProblemKind};
+use serde::Serialize;
+use std::path::{Path, PathBuf};
 
 /// UOJ 导出选项（用户可在 UI 覆盖 checker）。
 #[derive(Debug, Clone, Default)]
 pub struct UojOptions {
     pub checker_override: Option<String>,
+}
+
+/// 单题 UOJ 导出结果。
+#[derive(Debug, Serialize)]
+pub struct UojExportItem {
+    /// 产出的 zip 路径；跳过时为 None。
+    pub zip_path: Option<PathBuf>,
+    pub skipped: bool,
+    pub warnings: Vec<String>,
 }
 
 /// CCR 内置校验器 → UOJ 内建 checker。
@@ -84,6 +95,27 @@ pub fn build_problem_conf(p: &Problem, opts: &UojOptions) -> (String, Vec<String
         name = p.name
     );
     (conf, warnings)
+}
+
+/// 把单题导出为 UOJ 扁平 zip：`out_dir/<题名>.zip`，根层级含 problem.conf 与
+/// `<题名><i>.in/.out`（i 从 1，无子目录）。非传统题按 D7 跳过。
+pub fn export_problem_uoj(
+    p: &Problem,
+    contest_path: &Path,
+    out_dir: &Path,
+    opts: &UojOptions,
+) -> Result<UojExportItem, EngineError> {
+    todo!()
+}
+
+/// 题目类型的中文名（用于跳过警告）。
+fn kind_name(kind: ProblemKind) -> &'static str {
+    match kind {
+        ProblemKind::Traditional => "传统题",
+        ProblemKind::AnswersOnly => "提交答案题",
+        ProblemKind::Interactive => "交互题",
+        ProblemKind::Unknown => "未知类型题",
+    }
 }
 
 #[cfg(test)]
@@ -201,5 +233,120 @@ mod tests {
     fn map_checker_fulltext_to_lcmp() {
         assert_eq!(map_checker("fulltext"), "lcmp");
         assert_eq!(map_checker("whatever"), "lcmp");
+    }
+
+    /// 构造含真实数据文件的题目目录：data/<name>/<name><i>.in/.out。
+    fn fixture_on_disk(
+        tmp: &tempfile::TempDir,
+        name: &str,
+        n: usize,
+    ) -> (Problem, std::path::PathBuf) {
+        let data_dir = tmp.path().join("data").join(name);
+        std::fs::create_dir_all(&data_dir).unwrap();
+        let cases = (1..=n)
+            .map(|i| {
+                let in_name = format!("{name}{i}.in");
+                let out_name = format!("{name}{i}.out");
+                std::fs::write(data_dir.join(&in_name), format!("{in_name}\n")).unwrap();
+                std::fs::write(data_dir.join(&out_name), format!("{out_name}\n")).unwrap();
+                crate::engine::model::TestCase {
+                    in_file: PathBuf::from(&in_name),
+                    out_file: PathBuf::from(&out_name),
+                    time_limit: 1.0,
+                    memory_limit: 128.0,
+                    score: 10,
+                }
+            })
+            .collect();
+        let problem = Problem {
+            name: name.to_string(),
+            kind: crate::engine::model::ProblemKind::Traditional,
+            in_file: None,
+            out_file: None,
+            checker: Some("fulltext".to_string()),
+            custom_checker: None,
+            cases,
+            warnings: vec!["解析阶段警告样例".to_string()],
+            prb_found: true,
+        };
+        (problem, tmp.path().to_path_buf())
+    }
+
+    #[test]
+    fn export_flat_zip_with_21_entries() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let (a, contest_path) = fixture_on_disk(&tmp, "A", 10);
+        let out_dir = tmp.path().join("out");
+
+        let item = export_problem_uoj(&a, &contest_path, &out_dir, &UojOptions::default()).unwrap();
+        assert!(!item.skipped);
+        let zip_path = item.zip_path.unwrap();
+        assert_eq!(zip_path, out_dir.join("A.zip"));
+
+        let f = std::fs::File::open(&zip_path).unwrap();
+        let mut archive = zip::ZipArchive::new(f).unwrap();
+
+        // 根层级恰有 problem.conf + 10×.in + 10×.out，无子目录。
+        let mut names: Vec<String> = archive
+            .file_names()
+            .map(|s| s.to_string())
+            .collect();
+        names.sort();
+        let mut expected = vec!["problem.conf".to_string()];
+        for i in 1..=10 {
+            expected.push(format!("A{i}.in"));
+        }
+        for i in 1..=10 {
+            expected.push(format!("A{i}.out"));
+        }
+        expected.sort();
+        assert_eq!(names, expected);
+        assert!(names.iter().all(|n| !n.contains('/')));
+
+        // conf 内容与 Task 7 生成一致。
+        let mut conf = String::new();
+        use std::io::Read;
+        archive
+            .by_name("problem.conf")
+            .unwrap()
+            .read_to_string(&mut conf)
+            .unwrap();
+        let (want, _) = build_problem_conf(&a, &UojOptions::default());
+        assert_eq!(conf, want);
+
+        // 数据字节与源文件一致。
+        for i in 1..=10 {
+            let mut s = String::new();
+            archive
+                .by_name(&format!("A{i}.in"))
+                .unwrap()
+                .read_to_string(&mut s)
+                .unwrap();
+            assert_eq!(s, format!("A{i}.in\n"));
+        }
+    }
+
+    #[test]
+    fn export_carries_parse_warnings() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let (a, contest_path) = fixture_on_disk(&tmp, "A", 2);
+        let out_dir = tmp.path().join("out");
+
+        let item = export_problem_uoj(&a, &contest_path, &out_dir, &UojOptions::default()).unwrap();
+        assert!(item.warnings.iter().any(|w| w.contains("解析阶段警告样例")));
+    }
+
+    #[test]
+    fn answers_only_problem_is_skipped() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let (mut d, contest_path) = fixture_on_disk(&tmp, "D", 2);
+        d.kind = crate::engine::model::ProblemKind::AnswersOnly;
+        let out_dir = tmp.path().join("out");
+
+        let item = export_problem_uoj(&d, &contest_path, &out_dir, &UojOptions::default()).unwrap();
+        assert!(item.skipped);
+        assert!(item.zip_path.is_none());
+        assert!(!out_dir.join("D.zip").exists());
+        assert!(item.warnings.iter().any(|w| w.contains("提交答案题")));
     }
 }

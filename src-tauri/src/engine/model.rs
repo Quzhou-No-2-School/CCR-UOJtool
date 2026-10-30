@@ -82,6 +82,17 @@ pub struct Contest {
     pub problems: Vec<Problem>,
 }
 
+/// 引擎统一错误类型。
+#[derive(Debug, thiserror::Error)]
+pub enum EngineError {
+    #[error("IO 错误：{0}")]
+    Io(#[from] std::io::Error),
+    #[error("zip 错误：{0}")]
+    Zip(#[from] zip::result::ZipError),
+    #[error("{0}")]
+    Other(String),
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
