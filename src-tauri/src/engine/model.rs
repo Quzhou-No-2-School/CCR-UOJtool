@@ -51,17 +51,26 @@ pub struct Problem {
 impl Problem {
     /// 统一时限取最大值（决策 D3）。
     pub fn max_time(&self) -> f64 {
-        todo!()
+        self.cases
+            .iter()
+            .map(|c| c.time_limit)
+            .fold(f64::MIN, f64::max)
     }
 
     /// 统一内存取最大值（决策 D3）。
     pub fn max_mem(&self) -> f64 {
-        todo!()
+        self.cases
+            .iter()
+            .map(|c| c.memory_limit)
+            .fold(f64::MIN, f64::max)
     }
 
     /// subtask 分值是否均匀（所有 case score 相等即视为均匀）。
     pub fn uniform_score(&self) -> bool {
-        todo!()
+        match self.cases.first() {
+            Some(first) => self.cases.iter().all(|c| c.score == first.score),
+            None => true,
+        }
     }
 }
 
