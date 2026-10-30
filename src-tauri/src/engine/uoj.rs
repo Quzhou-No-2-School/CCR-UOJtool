@@ -2,7 +2,7 @@
 
 use crate::engine::model::{EngineError, ExportItem, Problem, ProblemKind};
 use crate::engine::ziputil;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 /// UOJ 导出选项（用户可在 UI 覆盖 checker）。
 #[derive(Debug, Clone, Default)]

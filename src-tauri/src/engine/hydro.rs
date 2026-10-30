@@ -107,7 +107,54 @@ pub fn export_problem_hydro(
     out_dir: &Path,
     opts: &HydroOptions,
 ) -> Result<HydroExportItem, EngineError> {
-    todo!()
+    // D7：提交答案题 / 交互题 V1 跳过。
+    if p.kind != ProblemKind::Traditional {
+        return Ok(ExportItem {
+            zip_path: None,
+            skipped: true,
+            warnings: vec![format!(
+                "{}，V1 不支持转换，已跳过",
+                match p.kind {
+                    ProblemKind::AnswersOnly => "提交答案题",
+                    ProblemKind::Interactive => "交互题",
+                    ProblemKind::Unknown => "未知类型题",
+                    ProblemKind::Traditional => unreachable!(),
+                }
+            )],
+        });
+    }
+
+    let (config_yaml, mut warnings) = build_config_yaml(p, opts);
+    warnings.extend(p.warnings.iter().cloned());
+
+    std::fs::create_dir_all(out_dir)?;
+    let zip_path = out_dir.join(format!("{}.zip", p.name));
+    let file = std::fs::File::create(&zip_path)?;
+    let mut zip = zip::ZipWriter::new(file);
+    let prefix = format!("{}/", p.name);
+
+    ziputil::write_entry(&mut zip, &format!("{prefix}problem.yaml"), build_problem_yaml(p).as_bytes())?;
+    ziputil::write_entry(&mut zip, &format!("{prefix}problem_zh.md"), build_statement_md(p).as_bytes())?;
+    ziputil::write_entry(
+        &mut zip,
+        &format!("{prefix}testdata/config.yaml"),
+        config_yaml.as_bytes(),
+    )?;
+
+    let data_dir = contest_path.join("data").join(&p.name);
+    for (i, case) in p.cases.iter().enumerate() {
+        let in_name = format!("{prefix}testdata/{}.in", i + 1);
+        let out_name = format!("{prefix}testdata/{}.out", i + 1);
+        ziputil::copy_file_into_zip(&mut zip, &in_name, &data_dir.join(&case.in_file))?;
+        ziputil::copy_file_into_zip(&mut zip, &out_name, &data_dir.join(&case.out_file))?;
+    }
+    zip.finish()?;
+
+    Ok(ExportItem {
+        zip_path: Some(zip_path),
+        skipped: false,
+        warnings,
+    })
 }
 
 #[cfg(test)]
