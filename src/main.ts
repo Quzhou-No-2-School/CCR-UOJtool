@@ -95,15 +95,17 @@ function fmtRange(values: number[]): string {
 
 // ---- 每题编辑状态 ----
 
-/** 默认编辑值取引擎推断：target_id=题名、time/mem=各点最大值上取整、
- * checker=fulltext 的保守映射 lcmp（src-tauri/src/engine/uoj.rs map_checker）。
+/** 默认编辑值取引擎推断：target_id=题名、time/mem=各点最大值上取整。
+ * checker 留空 → payload 发 null → 后端按目标各自映射（UOJ fulltext→lcmp；
+ * Hydro 自定义校验器→ccr，否则 default）。切勿在 UI 侧硬编码映射结果：
+ * 同一个 checker 值会被后端同时用作 UOJ/Hydro 的覆盖，lcmp 对 Hydro 非法。
  * 无测试点时与后端回退一致（1s / 128MB）。 */
 function defaultEdit(p: ProblemDto): ProblemEditState {
   return {
     targetId: p.name,
     time: p.cases.length ? String(Math.ceil(p.max_time)) : "1",
     mem: p.cases.length ? String(Math.ceil(p.max_mem)) : "128",
-    checker: "lcmp",
+    checker: "",
     enabled: true,
   };
 }
@@ -323,7 +325,7 @@ function renderDetail(): void {
     el(
       "p",
       "card-checker",
-      "默认值取引擎推断：题号=目录名，时限/内存=各点最大值上取整，checker=fulltext 映射 lcmp。留空时限/内存则由后端自行推断。",
+      "默认值取引擎推断：题号=目录名，时限/内存=各点最大值上取整。checker 留空由后端按目标映射（UOJ: fulltext→lcmp；Hydro: default / 自定义→ccr）。留空时限/内存则由后端自行推断。",
     ),
   );
 
