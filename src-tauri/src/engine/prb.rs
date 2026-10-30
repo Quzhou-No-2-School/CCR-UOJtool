@@ -40,9 +40,100 @@ fn strip_extension(s: &str) -> String {
     }
 }
 
+/// 根节点 `type` 属性 → 题目类型（计划 0.2 映射表）。
+fn parse_kind(type_attr: Option<&str>) -> ProblemKind {
+    match type_attr {
+        Some("TRA") | Some("TRA_0_4") => ProblemKind::Traditional,
+        Some("ANS") | Some("ANS_0_4") => ProblemKind::AnswersOnly,
+        Some("INT") | Some("INT_0_4") => ProblemKind::Interactive,
+        _ => ProblemKind::Unknown,
+    }
+}
+
 /// 解析 `.prb` 文件；文件不存在、XML 损坏或根节点非 `<problem>` 时返回 Err。
 pub fn parse_prb(path: &Path) -> Result<PrbConfig, String> {
-    todo!()
+    let text = std::fs::read_to_string(path)
+        .map_err(|e| format!("读取 {} 失败：{e}", path.display()))?;
+    parse_prb_str(&text)
+        .map_err(|e| format!("解析 {} 失败：{e}", path.display()))
+}
+
+/// 解析 `.prb` XML 字符串。
+fn parse_prb_str(xml: &str) -> Result<PrbConfig, String> {
+    let doc =
+        roxmltree::Document::parse(xml).map_err(|e| format!("XML 语法错误：{e}"))?;
+    let root = doc.root_element();
+    if root.tag_name().name() != "problem" {
+        return Err(format!(
+            "根节点为 <{}>，期望 <problem>",
+            root.tag_name().name()
+        ));
+    }
+
+    let kind = parse_kind(root.attribute("type"));
+
+    let source_dir = root
+        .children()
+        .filter(|n| n.is_element())
+        .find(|n| n.tag_name().name() == "source")
+        .and_then(|n| n.attribute("dir"))
+        .map(str::to_string);
+
+    let task = root
+        .children()
+        .filter(|n| n.is_element())
+        .find(|n| n.tag_name().name() == "task");
+
+    let (input, output, checker, subtasks) = match task {
+        None => (None, None, None, Vec::new()),
+        Some(task) => {
+            let input = task.attribute("input").map(str::to_string);
+            let output = task.attribute("output").map(str::to_string);
+            let checker = task
+                .attribute("checker")
+                .map(strip_extension)
+                .filter(|s| !s.is_empty());
+            let mut subtasks = Vec::new();
+            for sub in task.children().filter(|n| n.is_element()) {
+                if sub.tag_name().name() != "subtask" {
+                    continue;
+                }
+                let score = sub
+                    .attribute("score")
+                    .and_then(|s| s.parse::<u32>().ok())
+                    .unwrap_or(0);
+                let mut points = Vec::new();
+                for point in sub.children().filter(|n| n.is_element()) {
+                    if point.tag_name().name() != "point" {
+                        continue;
+                    }
+                    let in_file = point.attribute("in").unwrap_or_default().to_string();
+                    let out_file = point.attribute("out").unwrap_or_default().to_string();
+                    let time = point.attribute("time").and_then(|s| s.parse().ok());
+                    let mem = point.attribute("mem").and_then(|s| s.parse().ok());
+                    let submit = point.attribute("submit").map(str::to_string);
+                    points.push(PointCfg {
+                        in_file,
+                        out_file,
+                        time,
+                        mem,
+                        submit,
+                    });
+                }
+                subtasks.push((score, points));
+            }
+            (input, output, checker, subtasks)
+        }
+    };
+
+    Ok(PrbConfig {
+        kind,
+        source_dir,
+        input,
+        output,
+        checker,
+        subtasks,
+    })
 }
 
 #[cfg(test)]
