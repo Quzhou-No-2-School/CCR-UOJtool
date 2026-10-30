@@ -93,7 +93,7 @@ fn degrades_when_prb_missing() {
     let c = &contest.problems[2];
     assert_eq!(c.kind, ProblemKind::Traditional);
     assert!(!c.prb_found);
-    assert!(c.warnings.iter().any(|w| w.contains("未配置")));
+    assert!(c.warnings.iter().any(|w| w.contains("未在 CCR 中配置")));
     // 点数按 discover 推断，限制用默认值
     assert_eq!(c.cases.len(), 2);
     assert_eq!(c.cases[0].time_limit, 1.0);

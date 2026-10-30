@@ -33,7 +33,7 @@ pub struct PointCfg {
 }
 
 /// 与 CCR `RemoveFileExtension` 一致：只去最后一个 `.` 及其后内容。
-fn strip_extension(s: &str) -> String {
+pub fn strip_extension(s: &str) -> String {
     match s.rsplit_once('.') {
         Some((stem, _)) => stem.to_string(),
         None => s.to_string(),
