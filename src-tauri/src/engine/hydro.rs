@@ -170,16 +170,15 @@ pub fn export_problem_hydro(
     }
     // 自定义校验器：有源码才复制进 testdata/（config.yaml 的 checker 指向它，0.7 表）。
     // 终审 I2：非源码产物（如 ELF 二进制）不复制，警告已由 build_config_yaml 生成。
-    if let Some(file) = &p.custom_checker {
-        if is_checker_source(file) {
-            ziputil::copy_file_into_zip(
-                &mut zip,
-                &format!("{prefix}testdata/{file}"),
-                &data_dir.join(file),
-            )?;
-        }
-    }
-    zip.finish()?;
+    if let Some(file) = &p.custom_checker
+        && is_checker_source(file)
+    {
+        ziputil::copy_file_into_zip(
+            &mut zip,
+            &format!("{prefix}testdata/{file}"),
+            &data_dir.join(file),
+        )?;
+    }    zip.finish()?;
 
     Ok(ExportItem {
         zip_path: Some(zip_path),

@@ -186,7 +186,7 @@ fn build_degraded(name: &str, dir: &Path, opts: &ScanOptions) -> Problem {
     warnings.extend(discover_warnings);
 
     let n = pairs.len();
-    let base = if n > 0 { 100 / n } else { 0 };
+    let base = 100usize.checked_div(n).unwrap_or(0);
     let mut scores = vec![base; n];
     let mut rem = if n > 0 { 100 - base * n } else { 0 };
     let mut i = n;
