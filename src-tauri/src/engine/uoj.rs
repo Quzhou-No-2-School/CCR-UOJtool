@@ -1,6 +1,7 @@
 //! UOJ 导出：`problem.conf` 生成与 checker 映射、扁平 zip 打包（计划 0.4 / 0.7）。
 
 use crate::engine::model::{EngineError, Problem, ProblemKind};
+use crate::engine::ziputil;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 
@@ -105,7 +106,38 @@ pub fn export_problem_uoj(
     out_dir: &Path,
     opts: &UojOptions,
 ) -> Result<UojExportItem, EngineError> {
-    todo!()
+    // D7：提交答案题 / 交互题 V1 跳过。
+    if p.kind != ProblemKind::Traditional {
+        return Ok(UojExportItem {
+            zip_path: None,
+            skipped: true,
+            warnings: vec![format!("{}，V1 不支持转换，已跳过", kind_name(p.kind))],
+        });
+    }
+
+    let (conf, mut warnings) = build_problem_conf(p, opts);
+    warnings.extend(p.warnings.iter().cloned());
+
+    std::fs::create_dir_all(out_dir)?;
+    let zip_path = out_dir.join(format!("{}.zip", p.name));
+    let file = std::fs::File::create(&zip_path)?;
+    let mut zip = zip::ZipWriter::new(file);
+
+    ziputil::write_entry(&mut zip, "problem.conf", conf.as_bytes())?;
+    let data_dir = contest_path.join("data").join(&p.name);
+    for (i, case) in p.cases.iter().enumerate() {
+        let in_name = format!("{}{}.in", p.name, i + 1);
+        let out_name = format!("{}{}.out", p.name, i + 1);
+        ziputil::copy_file_into_zip(&mut zip, &in_name, &data_dir.join(&case.in_file))?;
+        ziputil::copy_file_into_zip(&mut zip, &out_name, &data_dir.join(&case.out_file))?;
+    }
+    zip.finish()?;
+
+    Ok(UojExportItem {
+        zip_path: Some(zip_path),
+        skipped: false,
+        warnings,
+    })
 }
 
 /// 题目类型的中文名（用于跳过警告）。
