@@ -2,7 +2,7 @@
 //!
 //! yaml 用字符串模板手工拼接，不引入 serde_yaml，保持确定性输出顺序。
 
-use crate::engine::model::Problem;
+use crate::engine::model::{Problem, ProblemKind};
 
 /// Hydro 导出选项（用户可覆盖 checker_type）。
 #[derive(Debug, Clone, Default)]
@@ -10,19 +10,87 @@ pub struct HydroOptions {
     pub checker_override: Option<String>,
 }
 
+/// 文件 IO 前缀：`<task input>` 去扩展名（如 "A.in" → "A"），缺省回退题目录名（0.7 表）。
+fn io_filename(p: &Problem) -> &str {
+    p.in_file
+        .as_deref()
+        .and_then(|s| s.rsplit_once('.').map(|(stem, _)| stem))
+        .unwrap_or(&p.name)
+}
+
 /// 生成 `testdata/config.yaml`（time 为毫秒整数，见计划 0.5 假设）。
 pub fn build_config_yaml(p: &Problem, opts: &HydroOptions) -> (String, Vec<String>) {
-    todo!()
+    let mut warnings = Vec::new();
+
+    // 统一限制取最大值（D3）。
+    let (time_ms, memory_mb) = if p.cases.is_empty() {
+        warnings.push("该题没有测试点，使用默认限制 1000ms/128MB".to_string());
+        (1000, 128)
+    } else {
+        let max_time = p.max_time();
+        let max_mem = p.max_mem();
+        if p.cases.iter().any(|c| c.time_limit != max_time) {
+            warnings.push(format!("各测试点时限不一致，已统一取最大值 {max_time}s"));
+        }
+        if p.cases.iter().any(|c| c.memory_limit != max_mem) {
+            warnings.push(format!(
+                "各测试点内存限制不一致，已统一取最大值 {max_mem}MB"
+            ));
+        }
+        // time 用毫秒整数可无损表达小数秒（0.5s → 500ms），无需上取整（0.5 假设）。
+        let t = (max_time * 1000.0).round() as i64;
+        let m = max_mem.ceil() as i64;
+        if m as f64 != max_mem {
+            warnings.push(format!("内存限制上取整：{max_mem}MB → {m}MB"));
+        }
+        (t, m)
+    };
+
+    // checker_type：用户覆盖 > 自定义校验器映射 ccr（0.7 表）> default。
+    let (checker_type, checker_line) = match &opts.checker_override {
+        Some(o) => (o.clone(), None),
+        None => match &p.custom_checker {
+            Some(file) => ("ccr".to_string(), Some(format!("checker: {file}\n"))),
+            None => ("default".to_string(), None),
+        },
+    };
+
+    let ty = match p.kind {
+        ProblemKind::AnswersOnly => "submit_answer",
+        ProblemKind::Interactive => "interactive",
+        _ => "default",
+    };
+
+    let mut yaml = String::new();
+    yaml.push_str(&format!("type: {ty}\n"));
+    yaml.push_str(&format!("time: {time_ms}\n"));
+    yaml.push_str(&format!("memory: {memory_mb}\n"));
+    yaml.push_str(&format!("filename: {}\n", io_filename(p)));
+    yaml.push_str(&format!("checker_type: {checker_type}\n"));
+    if let Some(line) = checker_line {
+        yaml.push_str(&line);
+    }
+    yaml.push_str("cases:\n");
+    for (i, _) in p.cases.iter().enumerate() {
+        yaml.push_str(&format!("  - input: {}.in\n", i + 1));
+        yaml.push_str(&format!("    output: {}.out\n", i + 1));
+    }
+    (yaml, warnings)
 }
 
 /// 生成 `problem.yaml`。
 pub fn build_problem_yaml(p: &Problem) -> String {
-    todo!()
+    format!("title: {}\n", p.name)
 }
 
 /// 生成 `problem_zh.md` 占位题面（D10：CCR 数据不含题面）。
 pub fn build_statement_md(p: &Problem) -> String {
-    todo!()
+    format!(
+        "# {name}\n\n\
+         题面待补充：CCR 比赛数据不含题面，请在 OJ 后台手动录入题目描述、\n\
+         输入输出格式与样例。\n",
+        name = p.name
+    )
 }
 
 #[cfg(test)]
