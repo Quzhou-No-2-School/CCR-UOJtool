@@ -217,7 +217,7 @@ fn warn_if_uneven(problem: &mut Problem) {
     if !problem.uniform_score() {
         problem
             .warnings
-            .push("子任务分值非均匀，UOJ 导出将按 100/N 等分".to_string());
+            .push("非均匀子任务分值：UOJ 导出将按 100/N 等分".to_string());
     }
 }
 
