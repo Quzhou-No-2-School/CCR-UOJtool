@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 /// CCR 题目类型（对应 `.prb` 根节点 `type` 属性，见计划 0.2）。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ProblemKind {
     Traditional,
     AnswersOnly,
@@ -129,6 +129,43 @@ pub struct ProblemEditDto {
     pub checker: Option<String>,
     /// 是否导出该题。
     pub enabled: bool,
+}
+
+/// 测试点 DTO（文件名为字符串）。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TestCaseDto {
+    pub in_file: String,
+    pub out_file: String,
+    pub time_limit: f64,
+    pub memory_limit: f64,
+    pub score: u32,
+}
+
+/// 题目 DTO（附带引擎推断的统一限制与均匀性，供前端做默认值）。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProblemDto {
+    pub name: String,
+    pub kind: ProblemKind,
+    pub in_file: Option<String>,
+    pub out_file: Option<String>,
+    pub checker: Option<String>,
+    pub custom_checker: Option<String>,
+    pub cases: Vec<TestCaseDto>,
+    pub warnings: Vec<String>,
+    pub prb_found: bool,
+    /// 统一时限（秒，各点最大值）。
+    pub max_time: f64,
+    /// 统一内存（MB，各点最大值）。
+    pub max_mem: f64,
+    pub uniform_score: bool,
+}
+
+/// 比赛 DTO。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContestDto {
+    pub name: String,
+    pub path: String,
+    pub problems: Vec<ProblemDto>,
 }
 
 #[cfg(test)]
