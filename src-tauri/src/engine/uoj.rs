@@ -17,7 +17,73 @@ pub fn map_checker(ccr_checker: &str) -> &'static str {
 
 /// 生成 UOJ `problem.conf` 文本（键顺序固定，见计划 0.4 样例）。
 pub fn build_problem_conf(p: &Problem, opts: &UojOptions) -> (String, Vec<String>) {
-    todo!()
+    let mut warnings = Vec::new();
+
+    // 自定义校验器：UOJ 判题接口不兼容，必须人工适配（0.7 表）。
+    if let Some(file) = &p.custom_checker {
+        warnings.push(format!(
+            "自定义校验器 {file} 与 UOJ 判题接口不兼容，需人工改写为 testlib checker"
+        ));
+    }
+
+    // checker：用户覆盖 > 保守映射。
+    let checker = match &opts.checker_override {
+        Some(o) => o.clone(),
+        None => {
+            let raw = p.checker.as_deref().unwrap_or("fulltext");
+            let mapped = map_checker(raw);
+            if raw != "fulltext" {
+                warnings.push(format!(
+                    "CCR 校验器 {raw} 非内置 fulltext，已保守映射为 {mapped}，请人工确认"
+                ));
+            }
+            mapped.to_string()
+        }
+    };
+
+    // 统一限制取最大值（D3），各点不一致时警告。
+    let (time_limit, mem_limit) = if p.cases.is_empty() {
+        warnings.push("该题没有测试点，使用默认限制 1s/128MB".to_string());
+        (1, 128)
+    } else {
+        let max_time = p.max_time();
+        let max_mem = p.max_mem();
+        if p.cases.iter().any(|c| c.time_limit != max_time) {
+            warnings.push(format!("各测试点时限不一致，已统一取最大值 {max_time}s"));
+        }
+        if p.cases.iter().any(|c| c.memory_limit != max_mem) {
+            warnings.push(format!(
+                "各测试点内存限制不一致，已统一取最大值 {max_mem}MB"
+            ));
+        }
+        let t = max_time.ceil() as i64;
+        if t as f64 != max_time {
+            warnings.push(format!("时限上取整：{max_time}s → {t}s"));
+        }
+        let m = max_mem.ceil() as i64;
+        if m as f64 != max_mem {
+            warnings.push(format!("内存限制上取整：{max_mem}MB → {m}MB"));
+        }
+        (t, m)
+    };
+
+    let n = p.cases.len();
+    let conf = format!(
+        "use_builtin_judger on\n\
+         use_builtin_checker {checker}\n\
+         n_tests {n}\n\
+         n_ex_tests 0\n\
+         n_sample_tests 0\n\
+         input_pre {name}\n\
+         input_suf in\n\
+         output_pre {name}\n\
+         output_suf out\n\
+         time_limit {time_limit}\n\
+         memory_limit {mem_limit}\n\
+         output_limit 64\n",
+        name = p.name
+    );
+    (conf, warnings)
 }
 
 #[cfg(test)]
