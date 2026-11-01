@@ -11,7 +11,7 @@ pub mod ziputil;
 
 pub use report::{ExportReport, ProblemReport};
 
-use model::{is_safe_file_name, Contest, EngineError, Problem, ProblemEditDto, ProblemKind};
+use model::{Contest, EngineError, Problem, ProblemEditDto, ProblemKind, is_safe_file_name};
 
 /// 导出目标格式。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -54,8 +54,7 @@ pub fn export_contest(
         if edit.is_some_and(|e| !e.enabled) {
             let mut rep = base_report(p, "skipped");
             rep.skipped = true;
-            rep.warnings
-                .push("已被用户禁用，未导出".to_string());
+            rep.warnings.push("已被用户禁用，未导出".to_string());
             items.push(rep);
             continue;
         }
@@ -64,10 +63,8 @@ pub fn export_contest(
         if p.kind != ProblemKind::Traditional {
             let mut rep = base_report(p, "skipped");
             rep.skipped = true;
-            rep.warnings.push(format!(
-                "{}，V1 不支持转换，已跳过",
-                p.kind.display_name()
-            ));
+            rep.warnings
+                .push(format!("{}，V1 不支持转换，已跳过", p.kind.display_name()));
             items.push(rep);
             continue;
         }
@@ -89,12 +86,8 @@ pub fn export_contest(
         }
         if matches!(target, Target::Hydro | Target::Both) {
             let mut rep = base_report(p, "hydro");
-            match hydro::export_problem_hydro(
-                p,
-                &contest.path,
-                &out_dir.join("hydro"),
-                &hydro_opts,
-            ) {
+            match hydro::export_problem_hydro(p, &contest.path, &out_dir.join("hydro"), &hydro_opts)
+            {
                 Ok(item) => {
                     rep.zip_path = item.zip_path.map(|z| z.display().to_string());
                     rep.skipped = item.skipped;
@@ -120,7 +113,9 @@ fn build_target_options(
 ) -> (uoj::UojOptions, hydro::HydroOptions, Vec<String>) {
     let edit = edit.filter(|e| e.enabled);
     let mut sanitize_warnings = Vec::new();
-    let raw_target_id = edit.and_then(|e| e.target_id.clone()).filter(|s| !s.is_empty());
+    let raw_target_id = edit
+        .and_then(|e| e.target_id.clone())
+        .filter(|s| !s.is_empty());
     let target_id = match raw_target_id {
         Some(id) if is_safe_file_name(&id) => Some(id),
         Some(id) => {
@@ -131,7 +126,9 @@ fn build_target_options(
         }
         None => None,
     };
-    let checker = edit.and_then(|e| e.checker.clone()).filter(|s| !s.is_empty());
+    let checker = edit
+        .and_then(|e| e.checker.clone())
+        .filter(|s| !s.is_empty());
     let time = edit.and_then(|e| e.time_limit);
     let mem = edit.and_then(|e| e.memory_limit);
     (

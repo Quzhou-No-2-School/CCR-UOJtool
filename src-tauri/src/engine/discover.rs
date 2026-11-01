@@ -100,10 +100,12 @@ pub fn discover_cases(dir: &Path) -> (Vec<(PathBuf, PathBuf)>, Vec<String>) {
             let mut f: BTreeMap<(String, String), u32> = BTreeMap::new();
             for s in &names {
                 if let Some(p) = s.find(a) {
-                    *f.entry((s[..p].to_string(), s[p + a.len()..].to_string())).or_insert(0) += 1;
+                    *f.entry((s[..p].to_string(), s[p + a.len()..].to_string()))
+                        .or_insert(0) += 1;
                 }
                 if let Some(q) = s.find(b) {
-                    *f.entry((s[..q].to_string(), s[q + b.len()..].to_string())).or_insert(0) += 1;
+                    *f.entry((s[..q].to_string(), s[q + b.len()..].to_string()))
+                        .or_insert(0) += 1;
                 }
             }
             let mut cell = Vec::new();
@@ -174,12 +176,7 @@ mod tests {
     fn names(pairs: &[(PathBuf, PathBuf)]) -> Vec<String> {
         pairs
             .iter()
-            .map(|(i, _)| {
-                i.file_name()
-                    .unwrap()
-                    .to_string_lossy()
-                    .into_owned()
-            })
+            .map(|(i, _)| i.file_name().unwrap().to_string_lossy().into_owned())
             .collect()
     }
 

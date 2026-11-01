@@ -2,9 +2,9 @@
 
 mod common;
 
-use common::build_fixture_contest;
 use ccr_uojtool_lib::commands::import_zip_to_dir;
-use ccr_uojtool_lib::engine::ccr::{scan_contest, ScanOptions};
+use ccr_uojtool_lib::engine::ccr::{ScanOptions, scan_contest};
+use common::build_fixture_contest;
 use std::path::Path;
 use tempfile::TempDir;
 
@@ -19,7 +19,8 @@ fn zip_dir(src: &Path, zip_path: &Path, wrap_in_folder: Option<&str>) {
             if path.is_dir() {
                 walk(zip, &path, &format!("{name}/"));
             } else {
-                zip.start_file(&name, zip::write::SimpleFileOptions::default()).unwrap();
+                zip.start_file(&name, zip::write::SimpleFileOptions::default())
+                    .unwrap();
                 std::io::copy(&mut std::fs::File::open(&path).unwrap(), zip).unwrap();
             }
         }

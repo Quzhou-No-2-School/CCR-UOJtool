@@ -2,9 +2,9 @@
 
 mod common;
 
-use common::build_fixture_contest;
-use ccr_uojtool_lib::engine::ccr::{scan_contest, ScanOptions};
+use ccr_uojtool_lib::engine::ccr::{ScanOptions, scan_contest};
 use ccr_uojtool_lib::engine::model::ProblemKind;
+use common::build_fixture_contest;
 use std::path::Path;
 use tempfile::TempDir;
 
@@ -145,7 +145,12 @@ fn rejects_path_traversal_test_points() {
         .iter()
         .filter(|w| w.contains("文件名非法"))
         .collect();
-    assert_eq!(illegal.len(), 3, "三个非法点各有警告，实际: {:?}", m.warnings);
+    assert_eq!(
+        illegal.len(),
+        3,
+        "三个非法点各有警告，实际: {:?}",
+        m.warnings
+    );
 }
 
 /// CCR 编译出的 ELF 二进制校验器（名为 checker，无源码扩展名）→

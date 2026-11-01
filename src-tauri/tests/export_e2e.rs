@@ -2,10 +2,10 @@
 
 mod common;
 
-use common::build_fixture_contest;
-use ccr_uojtool_lib::engine::ccr::{scan_contest, ScanOptions};
+use ccr_uojtool_lib::engine::ccr::{ScanOptions, scan_contest};
 use ccr_uojtool_lib::engine::model::ProblemEditDto;
-use ccr_uojtool_lib::engine::{export_contest, ExportOptions, Target};
+use ccr_uojtool_lib::engine::{ExportOptions, Target, export_contest};
+use common::build_fixture_contest;
 use std::io::Read;
 use tempfile::TempDir;
 
@@ -16,8 +16,7 @@ fn e2e_export_both_targets() {
     let contest = scan_contest(tmp.path(), &ScanOptions::default()).unwrap();
     let out = tmp.path().join("export");
 
-    let report =
-        export_contest(&contest, Target::Both, &out, &ExportOptions::default()).unwrap();
+    let report = export_contest(&contest, Target::Both, &out, &ExportOptions::default()).unwrap();
 
     // 输出目录：uoj/ 与 hydro/ 子目录各含 A/B/C 三个 zip；D 不产 zip。
     for sub in ["uoj", "hydro"] {
@@ -114,13 +113,7 @@ fn e2e_edits_rename_disable_checker() {
             enabled: false,
         },
     ];
-    let report = export_contest(
-        &contest,
-        Target::Uoj,
-        &out,
-        &ExportOptions { edits },
-    )
-    .unwrap();
+    let report = export_contest(&contest, Target::Uoj, &out, &ExportOptions { edits }).unwrap();
 
     // A 按新题号 prog 命名；B 被禁用不产 zip。
     assert!(out.join("uoj/prog.zip").is_file());
@@ -160,13 +153,7 @@ fn e2e_target_id_sanitized() {
         checker: None,
         enabled: true,
     }];
-    let report = export_contest(
-        &contest,
-        Target::Uoj,
-        &out,
-        &ExportOptions { edits },
-    )
-    .unwrap();
+    let report = export_contest(&contest, Target::Uoj, &out, &ExportOptions { edits }).unwrap();
 
     // 兜底：zip 用原题名 A 命名，且不产生逃逸路径的文件
     assert!(out.join("uoj/A.zip").is_file());

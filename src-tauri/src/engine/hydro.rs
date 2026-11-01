@@ -2,9 +2,7 @@
 //!
 //! yaml 用字符串模板手工拼接，不引入 serde_yaml，保持确定性输出顺序。
 
-use crate::engine::model::{
-    is_checker_source, EngineError, ExportItem, Problem, ProblemKind,
-};
+use crate::engine::model::{EngineError, ExportItem, Problem, ProblemKind, is_checker_source};
 use crate::engine::ziputil;
 use std::path::Path;
 
@@ -44,14 +42,10 @@ pub fn build_config_yaml(p: &Problem, opts: &HydroOptions) -> (String, Vec<Strin
     } else {
         let max_time = opts.time_limit.unwrap_or_else(|| p.max_time());
         let max_mem = opts.memory_limit.unwrap_or_else(|| p.max_mem());
-        if opts.time_limit.is_none()
-            && p.cases.iter().any(|c| c.time_limit != max_time)
-        {
+        if opts.time_limit.is_none() && p.cases.iter().any(|c| c.time_limit != max_time) {
             warnings.push(format!("各测试点时限不一致，已统一取最大值 {max_time}s"));
         }
-        if opts.memory_limit.is_none()
-            && p.cases.iter().any(|c| c.memory_limit != max_mem)
-        {
+        if opts.memory_limit.is_none() && p.cases.iter().any(|c| c.memory_limit != max_mem) {
             warnings.push(format!(
                 "各测试点内存限制不一致，已统一取最大值 {max_mem}MB"
             ));
@@ -153,8 +147,16 @@ pub fn export_problem_hydro(
     let mut zip = zip::ZipWriter::new(file);
     let prefix = format!("{display_name}/");
 
-    ziputil::write_entry(&mut zip, &format!("{prefix}problem.yaml"), build_problem_yaml(p).as_bytes())?;
-    ziputil::write_entry(&mut zip, &format!("{prefix}problem_zh.md"), build_statement_md(p).as_bytes())?;
+    ziputil::write_entry(
+        &mut zip,
+        &format!("{prefix}problem.yaml"),
+        build_problem_yaml(p).as_bytes(),
+    )?;
+    ziputil::write_entry(
+        &mut zip,
+        &format!("{prefix}problem_zh.md"),
+        build_statement_md(p).as_bytes(),
+    )?;
     ziputil::write_entry(
         &mut zip,
         &format!("{prefix}testdata/config.yaml"),
@@ -178,7 +180,8 @@ pub fn export_problem_hydro(
             &format!("{prefix}testdata/{file}"),
             &data_dir.join(file),
         )?;
-    }    zip.finish()?;
+    }
+    zip.finish()?;
 
     Ok(ExportItem {
         zip_path: Some(zip_path),
@@ -193,12 +196,7 @@ mod tests {
     use crate::engine::model::{ProblemKind, TestCase};
     use std::path::PathBuf;
 
-    fn problem_with(
-        name: &str,
-        times: &[f64],
-        mems: &[f64],
-        in_file: Option<&str>,
-    ) -> Problem {
+    fn problem_with(name: &str, times: &[f64], mems: &[f64], in_file: Option<&str>) -> Problem {
         let cases = times
             .iter()
             .enumerate()
@@ -363,8 +361,8 @@ mod tests {
         let (a, contest_path) = fixture_on_disk(&tmp, "A", 3);
         let out_dir = tmp.path().join("out");
 
-        let item = export_problem_hydro(&a, &contest_path, &out_dir, &HydroOptions::default())
-            .unwrap();
+        let item =
+            export_problem_hydro(&a, &contest_path, &out_dir, &HydroOptions::default()).unwrap();
         assert!(!item.skipped);
         let zip_path = item.zip_path.unwrap();
         assert_eq!(zip_path, out_dir.join("A.zip"));
@@ -432,8 +430,8 @@ mod tests {
         d.kind = ProblemKind::AnswersOnly;
         let out_dir = tmp.path().join("out");
 
-        let item = export_problem_hydro(&d, &contest_path, &out_dir, &HydroOptions::default())
-            .unwrap();
+        let item =
+            export_problem_hydro(&d, &contest_path, &out_dir, &HydroOptions::default()).unwrap();
         assert!(item.skipped);
         assert!(item.zip_path.is_none());
         assert!(!out_dir.join("D.zip").exists());
@@ -450,8 +448,8 @@ mod tests {
         std::fs::write(&src, "// checker.cpp source\n").unwrap();
         let out_dir = tmp.path().join("out");
 
-        let item = export_problem_hydro(&c, &contest_path, &out_dir, &HydroOptions::default())
-            .unwrap();
+        let item =
+            export_problem_hydro(&c, &contest_path, &out_dir, &HydroOptions::default()).unwrap();
         assert!(!item.skipped);
 
         let f = std::fs::File::open(item.zip_path.unwrap()).unwrap();
@@ -488,8 +486,8 @@ mod tests {
         std::fs::write(&src, b"\x7fELF\x02\x01\x01binary").unwrap();
         let out_dir = tmp.path().join("out");
 
-        let item = export_problem_hydro(&c, &contest_path, &out_dir, &HydroOptions::default())
-            .unwrap();
+        let item =
+            export_problem_hydro(&c, &contest_path, &out_dir, &HydroOptions::default()).unwrap();
         assert!(!item.skipped);
         assert!(item.warnings.iter().any(|w| w.contains("非源码")));
 

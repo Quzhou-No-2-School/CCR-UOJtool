@@ -1,8 +1,8 @@
 //! Tauri IPC 命令层：把引擎能力暴露给 Web 前端（参数/返回值全部 serde JSON）。
 
-use crate::engine::ccr::{scan_contest as engine_scan_contest, ScanOptions};
+use crate::engine::ccr::{ScanOptions, scan_contest as engine_scan_contest};
 use crate::engine::model::{Contest, ContestDto, ProblemDto, TestCaseDto};
-use crate::engine::{export_contest, parse_target, ExportOptions, ExportReport};
+use crate::engine::{ExportOptions, ExportReport, export_contest, parse_target};
 use std::path::{Path, PathBuf};
 
 /// 引擎 Contest → 前端 DTO（附带推断字段）。
@@ -44,13 +44,17 @@ pub fn contest_to_dto(contest: &Contest) -> ContestDto {
 /// 解压比赛 zip 到 `dest_root` 并定位比赛根目录。
 /// zip 根层就是比赛（有 data/）时返回 dest_root；只有一个子目录时返回该子目录。
 pub fn import_zip_to_dir(zip_path: &Path, dest_root: &Path) -> Result<PathBuf, String> {
-    let file = std::fs::File::open(zip_path).map_err(|e| format!("打开 {} 失败：{e}", zip_path.display()))?;
+    let file = std::fs::File::open(zip_path)
+        .map_err(|e| format!("打开 {} 失败：{e}", zip_path.display()))?;
     let mut archive = zip::ZipArchive::new(file).map_err(|e| format!("读取 zip 失败：{e}"))?;
-    std::fs::create_dir_all(dest_root).map_err(|e| format!("创建 {} 失败：{e}", dest_root.display()))?;
+    std::fs::create_dir_all(dest_root)
+        .map_err(|e| format!("创建 {} 失败：{e}", dest_root.display()))?;
 
     // enclosed_name 防 zip-slip：拒绝路径穿越条目。
     for i in 0..archive.len() {
-        let mut entry = archive.by_index(i).map_err(|e| format!("读取 zip 条目失败：{e}"))?;
+        let mut entry = archive
+            .by_index(i)
+            .map_err(|e| format!("读取 zip 条目失败：{e}"))?;
         let Some(rel) = entry.enclosed_name() else {
             return Err(format!("zip 内含不安全路径：{}", entry.name()));
         };
@@ -124,8 +128,8 @@ pub fn export_problems(
     target: String,
     out_dir: String,
 ) -> Result<ExportReport, String> {
-    let target =
-        parse_target(&target).ok_or_else(|| format!("未知导出目标 {target:?}（应为 uoj/hydro/both）"))?;
+    let target = parse_target(&target)
+        .ok_or_else(|| format!("未知导出目标 {target:?}（应为 uoj/hydro/both）"))?;
     let contest = engine_scan_contest(Path::new(&contest_path), &ScanOptions::default())?;
     export_contest(
         &contest,

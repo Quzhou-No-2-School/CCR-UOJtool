@@ -3,9 +3,9 @@
 use std::fs::File;
 use std::io::{Seek, Write};
 use std::path::Path;
+use zip::ZipWriter;
 use zip::result::ZipResult;
 use zip::write::SimpleFileOptions;
-use zip::ZipWriter;
 
 /// 把内存字节作为一个条目写入 zip。
 pub fn write_entry<W: Write + Seek>(

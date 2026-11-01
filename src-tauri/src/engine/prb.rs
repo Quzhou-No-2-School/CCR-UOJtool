@@ -52,16 +52,14 @@ fn parse_kind(type_attr: Option<&str>) -> ProblemKind {
 
 /// 解析 `.prb` 文件；文件不存在、XML 损坏或根节点非 `<problem>` 时返回 Err。
 pub fn parse_prb(path: &Path) -> Result<PrbConfig, String> {
-    let text = std::fs::read_to_string(path)
-        .map_err(|e| format!("读取 {} 失败：{e}", path.display()))?;
-    parse_prb_str(&text)
-        .map_err(|e| format!("解析 {} 失败：{e}", path.display()))
+    let text =
+        std::fs::read_to_string(path).map_err(|e| format!("读取 {} 失败：{e}", path.display()))?;
+    parse_prb_str(&text).map_err(|e| format!("解析 {} 失败：{e}", path.display()))
 }
 
 /// 解析 `.prb` XML 字符串。
 fn parse_prb_str(xml: &str) -> Result<PrbConfig, String> {
-    let doc =
-        roxmltree::Document::parse(xml).map_err(|e| format!("XML 语法错误：{e}"))?;
+    let doc = roxmltree::Document::parse(xml).map_err(|e| format!("XML 语法错误：{e}"))?;
     let root = doc.root_element();
     if root.tag_name().name() != "problem" {
         return Err(format!(
@@ -261,9 +259,11 @@ mod tests {
 
     #[test]
     fn missing_type_defaults_to_unknown() {
-        let cfg = parse_str(r#"<?xml version="1.0" encoding="UTF-8"?>
+        let cfg = parse_str(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
 <problem maker="ccr-plus"><task/></problem>
-"#)
+"#,
+        )
         .unwrap();
         assert_eq!(cfg.kind, ProblemKind::Unknown);
     }
@@ -291,9 +291,11 @@ mod tests {
 
     #[test]
     fn non_problem_root_returns_err() {
-        let r = parse_str(r#"<?xml version="1.0" encoding="UTF-8"?>
+        let r = parse_str(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
 <contest><order/></contest>
-"#);
+"#,
+        );
         assert!(r.is_err());
     }
 

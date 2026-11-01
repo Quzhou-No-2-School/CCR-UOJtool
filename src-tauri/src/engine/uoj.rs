@@ -53,23 +53,21 @@ pub fn build_problem_conf(p: &Problem, opts: &UojOptions) -> (String, Vec<String
     };
 
     // 统一限制取最大值（D3），各点不一致时警告；用户覆盖优先。
-    let (time_limit, mem_limit) = if let (Some(t), Some(m)) = (opts.time_limit, opts.memory_limit)
-    {
-        (ceil_warn(t, "时限", "s", &mut warnings), ceil_warn(m, "内存限制", "MB", &mut warnings))
+    let (time_limit, mem_limit) = if let (Some(t), Some(m)) = (opts.time_limit, opts.memory_limit) {
+        (
+            ceil_warn(t, "时限", "s", &mut warnings),
+            ceil_warn(m, "内存限制", "MB", &mut warnings),
+        )
     } else if p.cases.is_empty() {
         warnings.push("该题没有测试点，使用默认限制 1s/128MB".to_string());
         (1, 128)
     } else {
         let max_time = opts.time_limit.unwrap_or_else(|| p.max_time());
         let max_mem = opts.memory_limit.unwrap_or_else(|| p.max_mem());
-        if opts.time_limit.is_none()
-            && p.cases.iter().any(|c| c.time_limit != max_time)
-        {
+        if opts.time_limit.is_none() && p.cases.iter().any(|c| c.time_limit != max_time) {
             warnings.push(format!("各测试点时限不一致，已统一取最大值 {max_time}s"));
         }
-        if opts.memory_limit.is_none()
-            && p.cases.iter().any(|c| c.memory_limit != max_mem)
-        {
+        if opts.memory_limit.is_none() && p.cases.iter().any(|c| c.memory_limit != max_mem) {
             warnings.push(format!(
                 "各测试点内存限制不一致，已统一取最大值 {max_mem}MB"
             ));
@@ -322,10 +320,7 @@ mod tests {
         let mut archive = zip::ZipArchive::new(f).unwrap();
 
         // 根层级恰有 problem.conf + 10×.in + 10×.out，无子目录。
-        let mut names: Vec<String> = archive
-            .file_names()
-            .map(|s| s.to_string())
-            .collect();
+        let mut names: Vec<String> = archive.file_names().map(|s| s.to_string()).collect();
         names.sort();
         let mut expected = vec!["problem.conf".to_string()];
         for i in 1..=10 {
