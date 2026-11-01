@@ -475,6 +475,8 @@ git commit -m "test(ui): vitest unit tests for lib pure functions"
 
 ### Task 4: GitHub Actions 多平台 CI workflow（依赖树：Windows 编译门禁 → unit/e2e；Linux 直接 unit/e2e）
 
+> **执行调整（2026-10-30，用户要求）：** unit 与 e2e 拆分为 `needs:` 依赖的独立子 job，最终结构为 `windows-compile → { windows-unit, windows-e2e }` 与 `{ linux-unit, linux-e2e }`。同平台 job 用 rust-cache `shared-key` 共享缓存避免重复全量编译；e2e 子 job 纯 Rust 无需 Node（已实测：缺 `dist/` 时 `cargo check` 正常通过）。以下原文保留当时的设计（单 job 内步骤顺序表达依赖）。
+
 **Files:**
 - Create: `.github/workflows/ci.yml`
 
