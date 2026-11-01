@@ -20,8 +20,12 @@ CCR-UOJtool 是一款桌面应用（Windows / Linux），面向学校信息学�
 
 从 [Releases](../../releases) 页面下载对应平台的安装包：
 
-- Linux：`.deb`（Debian/Ubuntu 系）或 `.AppImage`（通用）
-- Windows：`.msi` 安装包（计划通过 CI 自动发布）
+- Linux：`.deb`（Debian/Ubuntu 系）、`.rpm`（Fedora 系）或 `.AppImage`（通用免安装）
+- Windows：`.msi` 安装包、`.exe`（NSIS 安装向导）或 `*portable.exe`（免安装单文件）
+
+> 免安装版本（Windows portable.exe / Linux AppImage）依赖系统 WebView2 运行时
+> （Windows 11 预装，Windows 10 较新版本一般预装；`.msi`/`.exe` 安装包缺 WebView2
+> 时会自动下载安装）。
 
 ### 从源码构建
 
@@ -46,6 +50,19 @@ npm run tauri build
 ```
 
 构建产物位于 `src-tauri/target/release/bundle/` 下（`.deb`、`.AppImage` 等）。
+
+### 版本发布（维护者）
+
+1. 同步三处版本号：`package.json`、`src-tauri/tauri.conf.json`、`src-tauri/Cargo.toml`（三者必须一致）
+2. 提交后打 tag 并推送：
+
+   ```bash
+   git tag v0.1.0
+   git push origin v0.1.0
+   ```
+
+3. Release 工作流自动校验版本一致性，构建 Windows / Linux 安装包，并创建 **Draft Release**
+4. 在 [Releases](../../releases) 页面检查草稿与附件，确认无误后点击 Publish
 
 ## 使用流程
 
